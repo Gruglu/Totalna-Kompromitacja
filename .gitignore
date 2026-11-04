@@ -1,0 +1,3 @@
+pytania/*.json
+!pytania/przyklad.json
+.DS_Store

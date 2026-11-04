@@ -1,0 +1,114 @@
+/* Totalna Kompromitacja: wspólne tokeny i elementy. Broadcast + CRT + teleturniej. */
+:root {
+  --bg: #0b0907;
+  --screen: #120d07;
+  --cell: #1a1309;
+  --cell-hi: #241a0c;
+  --line: #3a2a12;
+  --line-soft: #2a1e0d;
+  --amber: #ffb22e;
+  --amber-dim: #8a5d17;
+  --amber-faint: #4a3210;
+  --hot: #fff0cc;
+  --tally: #ff4130;
+  --ok: #9fe08a;
+  --glow: 0 0 0.5em rgba(255, 178, 46, 0.55), 0 0 1.4em rgba(255, 178, 46, 0.2);
+  --glow-red: 0 0 0.5em rgba(255, 65, 48, 0.6);
+  --f-display: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
+  --f-crt: 'VT323', 'Courier New', monospace;
+  --f-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--hot);
+  font-family: var(--f-mono);
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+::selection { background: var(--amber); color: var(--screen); }
+@keyframes blink { 50% { opacity: 0.25; } }
+.dot {
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  border-radius: 50%;
+  background: var(--tally);
+  box-shadow: 0 0 0.6em var(--tally);
+  animation: blink 1.6s steps(2) infinite;
+}
+.scanlines { position: relative; }
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  background:
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition: none !important; }
+}
+
+/* ---------- przyciski (panel i telefon) ---------- */
+.btn {
+  appearance: none;
+  border: 1px solid var(--amber-dim);
+  background: var(--cell);
+  color: var(--amber);
+  font-family: var(--f-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 18px;
+  line-height: 1;
+  padding: 10px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+.btn:hover:not(:disabled) { background: var(--cell-hi); border-color: var(--amber); }
+.btn:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn.primary { background: var(--amber); color: var(--screen); border-color: var(--amber); }
+.btn.primary:hover:not(:disabled) { background: #ffc35a; }
+.btn.danger { border-color: var(--tally); color: var(--tally); }
+.btn.danger.solid { background: var(--tally); color: var(--screen); }
+.btn.ok { border-color: var(--ok); color: var(--ok); }
+.btn.ok.solid { background: var(--ok); color: var(--screen); }
+.btn.ghost { background: transparent; }
+.btn.small { font-size: 14px; padding: 6px 9px; }
+kbd {
+  font-family: var(--f-mono);
+  font-size: 0.68em;
+  font-weight: 600;
+  border: 1px solid currentColor;
+  padding: 1px 4px;
+  opacity: 0.8;
+  letter-spacing: 0;
+}
+.label {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--amber-dim);
+}
+.field {
+  background: var(--screen);
+  border: 1px solid var(--line);
+  color: var(--hot);
+  padding: 10px 12px;
+  font-family: var(--f-mono);
+  font-size: 16px;
+  width: 100%;
+}
+.field:focus { outline: none; border-color: var(--amber); }

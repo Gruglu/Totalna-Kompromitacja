@@ -1,0 +1,577 @@
+{
+ "title": "Totalna Kompromitacja",
+ "example": true,
+ "rounds": [
+  {
+   "name": "Runda 1",
+   "values": [
+    100,
+    200,
+    300,
+    400,
+    500
+   ],
+   "categories": [
+    {
+     "name": "Star Wars",
+     "questions": [
+      {
+       "q": "[Star Wars · 100] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 100",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Star Wars · 200] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Star Wars · 300] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 300",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Star Wars · 400] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Star Wars · 500] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 500",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Warhammer 40k",
+     "questions": [
+      {
+       "q": "[Warhammer 40k · 100] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 100",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Warhammer 40k · 200] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Warhammer 40k · 300] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 300",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Warhammer 40k · 400] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Warhammer 40k · 500] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 500",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Internet",
+     "questions": [
+      {
+       "q": "[Internet · 100] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 100",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Internet · 200] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Internet · 300] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 300",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Internet · 400] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Internet · 500] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 500",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Polskie klasyki memowe",
+     "questions": [
+      {
+       "q": "[Polskie klasyki memowe · 100] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 100",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Polskie klasyki memowe · 200] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Polskie klasyki memowe · 300] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 300",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Polskie klasyki memowe · 400] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Polskie klasyki memowe · 500] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 500",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Gacha",
+     "questions": [
+      {
+       "q": "[Gacha · 100] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 100",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Gacha · 200] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Gacha · 300] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 300",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Gacha · 400] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Gacha · 500] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 500",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Sieci i IT",
+     "questions": [
+      {
+       "q": "[Sieci i IT · 100] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 100",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Sieci i IT · 200] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Sieci i IT · 300] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 300",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Sieci i IT · 400] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Sieci i IT · 500] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 500",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Runda 2",
+   "values": [
+    200,
+    400,
+    600,
+    800,
+    1000
+   ],
+   "categories": [
+    {
+     "name": "Mass Effect",
+     "questions": [
+      {
+       "q": "[Mass Effect · 200] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Mass Effect · 400] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Mass Effect · 600] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 600",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Mass Effect · 800] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 800",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Mass Effect · 1000] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 1000",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Warframe",
+     "questions": [
+      {
+       "q": "[Warframe · 200] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Warframe · 400] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Warframe · 600] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 600",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Warframe · 800] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 800",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Warframe · 1000] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 1000",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Destiny",
+     "questions": [
+      {
+       "q": "[Destiny · 200] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Destiny · 400] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Destiny · 600] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 600",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Destiny · 800] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 800",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Destiny · 1000] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 1000",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Fortnite",
+     "questions": [
+      {
+       "q": "[Fortnite · 200] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Fortnite · 400] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Fortnite · 600] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 600",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Fortnite · 800] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 800",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Fortnite · 1000] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 1000",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Cyberbezpieczeństwo",
+     "questions": [
+      {
+       "q": "[Cyberbezpieczeństwo · 200] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Cyberbezpieczeństwo · 400] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Cyberbezpieczeństwo · 600] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 600",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Cyberbezpieczeństwo · 800] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 800",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Cyberbezpieczeństwo · 1000] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 1000",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    },
+    {
+     "name": "Pomieszane uniwersa",
+     "questions": [
+      {
+       "q": "[Pomieszane uniwersa · 200] Krótkie pytanie testowe.",
+       "a": "Odpowiedź testowa 200",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Pomieszane uniwersa · 400] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
+       "a": "Odpowiedź testowa 400",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Pomieszane uniwersa · 600] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
+       "a": "Odpowiedź testowa 600",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Pomieszane uniwersa · 800] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",
+       "a": "Odpowiedź testowa 800",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      },
+      {
+       "q": "[Pomieszane uniwersa · 1000] Pytanie testowe za najwyższą stawkę.",
+       "a": "Odpowiedź testowa 1000",
+       "alt": [
+        "test"
+       ],
+       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "final": {
+  "category": "Testowy finał",
+  "q": "Pytanie finałowe testowe. Wpisz cokolwiek na telefonie.",
+  "a": "Odpowiedź finałowa",
+  "alt": [],
+  "note": "Ciekawostka finałowa."
+ }
+}

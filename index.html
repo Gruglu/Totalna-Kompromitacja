@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#120d07">
+<title>Totalna Kompromitacja</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=VT323&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/theme.css">
+<style>
+  body { min-height: 100vh; display: grid; place-items: center; }
+  .wrap { width: min(560px, 100%); padding: 32px max(20px, env(safe-area-inset-right, 0px)) 32px max(20px, env(safe-area-inset-left, 0px)); display: grid; gap: 26px; }
+  h1 { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: clamp(52px, 15vw, 96px); line-height: 0.86; text-transform: uppercase; color: var(--amber); text-shadow: 0 0 16px rgba(255,178,46,.45); }
+  p { margin: 0; font-family: var(--f-crt); font-size: 26px; line-height: 1.15; color: var(--hot); }
+  .opts { display: grid; gap: 10px; }
+  .opts a { text-decoration: none; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; border: 1px solid var(--line); background: var(--cell); padding: 16px 18px; }
+  .opts a:hover, .opts a:focus-visible { border-color: var(--amber); outline: none; background: var(--cell-hi); }
+  .opts b { font-family: var(--f-display); font-weight: 900; font-size: 30px; text-transform: uppercase; color: var(--amber); }
+  .opts span { grid-column: 1; font-size: 13px; color: var(--amber-dim); }
+  .opts i { grid-row: 1 / 3; grid-column: 2; font-style: normal; font-family: var(--f-crt); font-size: 34px; color: var(--amber); }
+  .opts a.main { background: var(--amber); border-color: var(--amber); }
+  .opts a.main b, .opts a.main span, .opts a.main i { color: var(--screen); }
+</style>
+</head>
+<body class="scanlines">
+<div class="wrap">
+  <h1>Totalna Kompromitacja</h1>
+  <p>Nerdowski teleturniej. Wiedza, buzzery i publiczne upokorzenie.</p>
+  <nav class="opts">
+    <a class="main" href="play.html"><b>Gram</b><span>wpisz kod pokoju ze streamu</span><i>&gt;</i></a>
+    <a href="host.html"><b>Prowadzę</b><span>panel prowadzącego i ekran streamu</span><i>&gt;</i></a>
+  </nav>
+</div>
+</body>
+</html>
