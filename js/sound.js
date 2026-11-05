@@ -110,7 +110,73 @@ const SOUNDS = {
   tick() {
     tone(1200, 0, 0.03, { gain: 0.06 });
   },
+  rule() {
+    tone(660, 0, 0.05, { gain: 0.1 });
+    tone(990, 0.05, 0.09, { gain: 0.1 });
+  },
+  // czołówka, ok. 11 s, zsynchronizowana z animacją w board.js (OPENER)
+  opener() {
+    // włączenie kineskopu
+    noise(0, 0.5, 0.12, 400);
+    tone(60, 0, 0.5, { type: 'sine', gain: 0.3, slide: 1400 });
+    tone(55, 0.5, 3.1, { type: 'triangle', gain: 0.12 });
+    // pikanie przy każdej linii logu
+    for (let i = 0; i < 8; i++) tone(i === 3 || i === 6 ? 220 : 1760, 0.6 + i * 0.36, i === 3 || i === 6 ? 0.14 : 0.03, { gain: 0.08 });
+    // zakłócenie i uderzenie z logo
+    noise(3.55, 0.2, 0.25, 900);
+    const hit = (t, root) => {
+      tone(150, t, 0.3, { type: 'sine', gain: 0.55, slide: 38 });
+      noise(t, 1.2, 0.14, 4000);
+      [1, 1.5, 2].forEach((m) => tone(root * m, t, 0.9, { type: 'sawtooth', gain: 0.07 }));
+    };
+    hit(3.75, 110);
+    hit(4.45, 98);
+    // motyw: 132 BPM, a-moll, bas + bęben + melodia
+    const B = 60 / 132;
+    const t0 = 5.0;
+    const bass = [55, 55, 110, 55, 65.4, 65.4, 130.8, 65.4, 49, 49, 98, 49, 41.2, 41.2, 82.4, 98];
+    const lead = [440, 0, 523, 659, 784, 0, 659, 523, 587, 0, 523, 494, 440, 0, 0, 0, 440, 0, 523, 659, 880, 0, 784, 659, 698, 659, 587, 523, 494, 0, 0, 0];
+    for (let i = 0; i < 16; i++) {
+      const t = t0 + (i * B) / 2;
+      tone(bass[i], t, B / 2.2, { type: 'square', gain: 0.11 });
+      if (i % 2 === 0) tone(140, t, 0.2, { type: 'sine', gain: 0.45, slide: 42 });
+      if (i % 4 === 2) noise(t, 0.16, 0.16, 1600);
+      noise(t + B / 4, 0.03, 0.04, 7000);
+    }
+    for (let i = 0; i < 16; i++) {
+      const t = t0 + 8 * B + (i * B) / 2;
+      tone(bass[i], t, B / 2.2, { type: 'square', gain: 0.11 });
+      if (i % 2 === 0) tone(140, t, 0.2, { type: 'sine', gain: 0.45, slide: 42 });
+      if (i % 4 === 2) noise(t, 0.16, 0.16, 1600);
+      noise(t + B / 4, 0.03, 0.04, 7000);
+    }
+    lead.forEach((f, i) => f && tone(f, t0 + (i * B) / 2, B / 2.4, { type: 'square', gain: 0.06 }));
+    // akord na koniec
+    const tEnd = t0 + 16 * B;
+    tone(150, tEnd, 0.4, { type: 'sine', gain: 0.55, slide: 36 });
+    noise(tEnd, 1.6, 0.12, 3500);
+    [110, 165, 220, 330].forEach((f) => tone(f, tEnd, 1.8, { type: 'sawtooth', gain: 0.06 }));
+    tone(880, tEnd, 1.8, { type: 'square', gain: 0.04 });
+  },
 };
+
+// audio z pytań przechodzi przez ten sam mikser, żeby był analizator do wizualizacji
+const routed = new WeakMap();
+export function connectMedia(el) {
+  if (!ctx) return null;
+  if (routed.has(el)) return routed.get(el);
+  try {
+    const src = ctx.createMediaElementSource(el);
+    const an = ctx.createAnalyser();
+    an.fftSize = 256;
+    an.smoothingTimeConstant = 0.72;
+    src.connect(an).connect(master);
+    routed.set(el, an);
+    return an;
+  } catch {
+    return null;
+  }
+}
 
 export function play(name) {
   if (!ctx || ctx.state !== 'running') return;

@@ -69,12 +69,14 @@
        "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
       },
       {
-       "q": "[Warhammer 40k · 200] Trochę dłuższe pytanie testowe, żeby sprawdzić, jak tekst się zawija na ekranie.",
-       "a": "Odpowiedź testowa 200",
+       "q": "[Obrazek] Co widać na tym kadrze?",
+       "a": "Plansza testowa",
        "alt": [
         "test"
        ],
-       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+       "note": "Pytanie testowe z obrazkiem. Po odpowiedzi stream pokazuje drugi obrazek.",
+       "image": "pytania/media/demo-kadr.svg",
+       "answerImage": "pytania/media/demo-kadr-odp.svg"
       },
       {
        "q": "[Warhammer 40k · 300] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
@@ -122,12 +124,15 @@
        "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
       },
       {
-       "q": "[Internet · 300] Pytanie testowe średniej długości, które ma dwie linijki i pokazuje, jak wygląda wpisywanie tekstu znak po znaku.",
-       "a": "Odpowiedź testowa 300",
+       "q": "[Muzyka] Z czego jest ten motyw? Muzykę puszczasz klawiszem M.",
+       "a": "Z przykładowego zestawu",
        "alt": [
         "test"
        ],
-       "note": "Tu będzie ciekawostka dla prowadzącego do skomentowania."
+       "note": "Pytanie testowe z muzyką: gra fragment 0–6 s.",
+       "audio": "pytania/media/demo-melodia.mp3",
+       "audioStart": 0,
+       "audioEnd": 6
       },
       {
        "q": "[Internet · 400] Długie pytanie testowe. Prawdziwe pytania będą w osobnym pliku, którego nie ma w repozytorium, żeby gracze nie mogli ich podejrzeć. Ten tekst sprawdza tylko, czy długie treści mieszczą się na planszy.",

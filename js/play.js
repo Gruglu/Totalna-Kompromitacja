@@ -139,6 +139,8 @@ function body() {
   const ph = v.phase;
   if (!v.me) return { info: ['Łączenie…', ''], center: '' };
   if (ph === 'lobby') return { info: ['Jesteś w grze', 'czekamy na start'], center: `<button class="buzzer" id="buzz" disabled>Rozgrzewka<small>tu będzie Twój buzzer</small></button>` };
+  if (ph === 'opener') return { info: ['Zaraz zaczynamy', 'patrz na stream'], center: `<button class="buzzer" id="buzz" disabled>Czołówka<small>jeszcze możesz uciec</small></button>` };
+  if (ph === 'rules') return { info: ['Zasady', 'słuchaj, potem nie płacz'], center: `<button class="buzzer" id="buzz" disabled>Zasady<small>buzzer ruszy w pierwszej rundzie</small></button>` };
   if (ph === 'round-intro') return { info: ['Nowa runda', `zaczyna ${v.pickerName}`], center: `<button class="buzzer" id="buzz">Czekaj<small>za chwilę plansza</small></button>` };
   if (ph === 'board')
     return {

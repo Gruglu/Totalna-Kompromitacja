@@ -7,16 +7,25 @@ Nerdowski teleturniej w stylu Jeopardy na Discorda. Statyczna strona (GitHub Pag
 1. Prowadzący otwiera `host.html` (panel, tego nie streamuje).
 2. W panelu klika **Ekran streamu**, w nowym oknie klika raz (dźwięk), `F` = pełny ekran. To okno udostępnia na Discordzie.
 3. Gracze wchodzą z telefonu w link albo skanują QR ze streamu (`play.html?r=KOD`) i wpisują nick.
-4. **Wczytaj pytania**: własny plik JSON. Pytania zostają tylko w przeglądarce prowadzącego, nie trafiają do repo.
+4. **Wczytaj folder**: folder z pytaniami (plik JSON + podfolder `media/`). Jeśli w folderze jest kilka JSON-ów, panel zapyta, który gramy. **Wczytaj pliki** przyjmuje sam JSON albo JSON razem z plikami mediów. Pytania i media zostają tylko w przeglądarce prowadzącego (localStorage + IndexedDB), nie trafiają do repo.
+5. Start odcinka: **Czołówka** (animacja z muzyką na streamie, ok. 11 s), potem **Zasady** (prowadzący czyta tekst z panelu, stream pokazuje skrót), potem pierwsza runda.
 
 ## Skróty w panelu
 
-`Spacja` otwórz buzzery · `D` dobrze · `Z` źle · `P` połowa · `N` nikt nie wie · `Enter` dalej · `1–6` zgłoszenie ręczne (gdy komuś nie działa telefon) · `Ctrl+Z` cofnij.
+`Spacja` otwórz buzzery · `D` dobrze · `Z` źle · `P` połowa · `N` nikt nie wie · `Enter` dalej · `1–6` zgłoszenie ręczne (gdy komuś nie działa telefon) · `Ctrl+Z` cofnij · `M` muzyka graj/pauza · `R` muzyka od początku · `←`/`→` poprzednia/następna zasada.
 
 ## Plik z pytaniami
 
 Wzór: `pytania/przyklad.json`. Każda runda ma `values` (stawki) i `categories`; każda kategoria ma tyle pytań, ile stawek.
-Pytanie: `q` (treść), `a` (odpowiedź), opcjonalnie `alt` (inne akceptowane odpowiedzi), `note` (ciekawostka dla prowadzącego), `image` (adres obrazka).
+Pytanie: `q` (treść), `a` (odpowiedź), opcjonalnie `alt` (inne akceptowane odpowiedzi), `note` (ciekawostka dla prowadzącego) i media:
+
+- `image`: obrazek pokazywany razem z pytaniem,
+- `answerImage`: obrazek pokazywany dopiero z odpowiedzią,
+- `audio`: klip, który prowadzący puszcza z panelu (gra okno streamu), `audioStart` i `audioEnd` w sekundach wycinają fragment.
+
+Ścieżki mediów są względne do pliku JSON (`media/kadr.jpg`) albo to pełne adresy `https://`. Obrazki jpg/png/webp/svg, audio mp3/ogg/m4a. Nazwy plików najlepiej unikalne, bo przy wczytywaniu pojedynczych plików dopasowanie idzie po nazwie. Panel w poczekalni pokazuje, których plików brakuje.
+
+Odcinek: `episode` (numer w czołówce; bez tego pola brany z nazwy pliku `odcinek-2.json`) i `subtitle` (podpis pod logo). Własne zasady: `rules` jako lista `{ "title", "board": [krótkie linijki na stream], "host": "tekst do przeczytania" }`; bez tego pola panel układa zasady sam na podstawie zestawu (rundy, stawki, pola „wszystko albo nic”, finał, czy są media).
 Finał: `category`, `q`, `a`. Liczba pól „wszystko albo nic” na rundę: `dailyDoubles` (domyślnie 1 i 2).
 
 Prawdziwych pytań nie wrzucamy do repo (`pytania/*.json` poza przykładem jest w `.gitignore`).

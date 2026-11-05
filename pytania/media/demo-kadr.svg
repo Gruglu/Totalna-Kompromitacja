@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
+  <rect width="640" height="400" fill="#1a1309"/>
+  <g>
+    <rect x="0" y="0" width="91" height="260" fill="#ffb22e"/>
+    <rect x="91" y="0" width="92" height="260" fill="#e8e0c8"/>
+    <rect x="183" y="0" width="91" height="260" fill="#4fb7b0"/>
+    <rect x="274" y="0" width="92" height="260" fill="#6aa84f"/>
+    <rect x="366" y="0" width="91" height="260" fill="#b04fa8"/>
+    <rect x="457" y="0" width="92" height="260" fill="#ff4130"/>
+    <rect x="549" y="0" width="91" height="260" fill="#2e4bff"/>
+  </g>
+  <rect x="0" y="260" width="640" height="140" fill="#120d07"/>
+  <circle cx="320" cy="200" r="120" fill="none" stroke="#120d07" stroke-width="10"/>
+  <text x="320" y="350" text-anchor="middle" font-family="monospace" font-size="44" fill="#ffb22e">PLANSZA TESTOWA</text>
+</svg>
