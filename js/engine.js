@@ -6,6 +6,8 @@ export const FINAL_SECONDS = 30;
 export const DD_MIN = 5;
 export const DD_PER_ROUND = [1, 2];
 
+import { rulesFor } from './rules.js';
+
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const now = () => Date.now();
 
@@ -23,6 +25,7 @@ export function newGame(set, players = []) {
     cur: null,
     final: null,
     fx: { n: 0, type: null },
+    media: { n: 0, cmd: null },
   };
 }
 
@@ -50,6 +53,32 @@ export function finalists(s) {
 
 function fx(s, type) {
   s.fx = { n: s.fx.n + 1, type };
+}
+
+// polecenie dla odtwarzacza audio na streamie (graj / pauza / od nowa / stop)
+function mediaCmd(s, cmd) {
+  const m = s.media || { n: 0 };
+  s.media = { n: m.n + 1, cmd, at: now() };
+}
+
+// pytanie, które jest teraz na ekranie (zwykłe albo finałowe)
+export function currentQuestion(s) {
+  if (s.cur && ['dd', 'question', 'reveal'].includes(s.phase)) return roundOf(s).categories[s.cur.c].questions[s.cur.q];
+  if (s.final && ['final-question', 'final-reveal'].includes(s.phase)) return s.set.final;
+  return null;
+}
+
+// wszystkie ścieżki mediów użyte w zestawie (do sprawdzenia, czy pliki są wczytane)
+export function mediaRefs(set) {
+  const out = [];
+  const add = (q, where) => {
+    for (const f of ['image', 'answerImage', 'audio']) if (q?.[f]) out.push({ src: q[f], field: f, where });
+  };
+  (set?.rounds || []).forEach((r, ri) =>
+    (r.categories || []).forEach((c, ci) => (c.questions || []).forEach((q, qi) => add(q, `R${ri + 1} · ${c.name} · ${r.values?.[qi] ?? qi + 1}`)))
+  );
+  if (set?.final) add(set.final, 'Finał');
+  return out;
 }
 
 function lowestScorer(s) {
@@ -137,8 +166,37 @@ export function reduce(state, a) {
       s.picker = a.id;
       return s;
 
+    case 'opener':
+      if (!['lobby', 'opener', 'rules'].includes(s.phase)) return state;
+      s.phase = 'opener';
+      s.openerAt = now();
+      fx(s, 'opener');
+      return s;
+    case 'rules': {
+      if (!['lobby', 'opener', 'rules'].includes(s.phase)) return state;
+      s.phase = 'rules';
+      s.rule = Math.max(0, Math.min(a.idx ?? 0, rulesFor(s.set).length - 1));
+      s.ruleAt = now();
+      fx(s, 'rule');
+      return s;
+    }
+    case 'ruleStep': {
+      if (s.phase !== 'rules') return state;
+      const n = rulesFor(s.set).length;
+      const i = s.rule + a.dir;
+      if (i < 0 || i >= n) return state;
+      s.rule = i;
+      s.ruleAt = now();
+      fx(s, 'rule');
+      return s;
+    }
+    case 'lobby':
+      if (!['opener', 'rules'].includes(s.phase)) return state;
+      s.phase = 'lobby';
+      return s;
+
     case 'start':
-      if (!s.players.length) return state;
+      if (!s.players.length || !['lobby', 'opener', 'rules'].includes(s.phase)) return state;
       s.round = 0;
       s.used = {};
       s.dd = {};
@@ -147,6 +205,11 @@ export function reduce(state, a) {
       s.phase = 'round-intro';
       s.introAt = now();
       fx(s, 'intro');
+      return s;
+
+    case 'media':
+      if (!currentQuestion(s)?.audio) return state;
+      mediaCmd(s, a.cmd);
       return s;
 
     case 'showBoard':
@@ -174,6 +237,7 @@ export function reduce(state, a) {
         result: null,
         shownAt: null,
       };
+      mediaCmd(s, 'stop');
       if (isDD) {
         s.phase = 'dd';
         fx(s, 'dd');
@@ -269,6 +333,7 @@ export function reduce(state, a) {
       }
       if (s.phase !== 'reveal') return state;
       s.cur = null;
+      mediaCmd(s, 'stop');
       if (!roundDone(s)) {
         s.phase = 'board';
       } else if (s.round < s.set.rounds.length - 1) {
@@ -284,6 +349,7 @@ export function reduce(state, a) {
     }
     case 'endRound': // awaryjnie: pomiń resztę rundy
       s.cur = null;
+      mediaCmd(s, 'stop');
       if (s.round < s.set.rounds.length - 1) {
         s.round++;
         s.picker = lowestScorer(s);
@@ -308,6 +374,7 @@ export function reduce(state, a) {
     }
     case 'finalQuestion':
       if (s.phase !== 'final-wager') return state;
+      mediaCmd(s, 'stop');
       s.final.ids.forEach((id) => {
         if (s.final.wagers[id] == null) s.final.wagers[id] = 0;
       });
@@ -353,6 +420,7 @@ export function reduce(state, a) {
         s.final.shown = false;
       } else {
         s.phase = 'end';
+        mediaCmd(s, 'stop');
         fx(s, 'end');
       }
       return s;
@@ -401,7 +469,22 @@ export function boardView(s) {
     introAt: s.introAt,
     qTotal: r ? r.categories.reduce((n, c) => n + c.questions.length, 0) : 0,
     qDone: Object.keys(s.used).filter((k) => k.startsWith(s.round + ':')).length,
+    media: s.media || { n: 0, cmd: null },
   };
+  if (s.phase === 'opener') {
+    v.opener = { at: s.openerAt, episode: s.set.episode ?? null, subtitle: s.set.subtitle || null };
+  }
+  if (s.phase === 'rules') {
+    const list = rulesFor(s.set);
+    const r0 = list[s.rule] || list[0];
+    v.rules = { idx: s.rule, count: list.length, title: r0.title, lines: r0.board, at: s.ruleAt };
+  }
+  const mq = currentQuestion(s);
+  const showMedia = mq && s.phase !== 'dd';
+  if (showMedia && mq.audio) v.audio = { src: mq.audio, start: Number(mq.audioStart) || 0, end: Number(mq.audioEnd) || null };
+  if (showMedia && mq.answerImage) {
+    if (s.phase === 'reveal' || (s.phase === 'final-reveal' && s.final?.shown)) v.answerImage = mq.answerImage;
+  }
   if (s.cur) {
     const q = r.categories[s.cur.c].questions[s.cur.q];
     const showQ = s.phase !== 'dd';
@@ -414,6 +497,7 @@ export function boardView(s) {
       wager: s.cur.wager,
       text: showQ ? q.q : null,
       image: showQ ? q.image || null : null,
+      hasAudio: showQ && !!q.audio,
       buzzOpen: s.cur.buzzOpen,
       openedAt: s.cur.openedAt,
       buzzed: s.cur.buzzed,
@@ -432,6 +516,7 @@ export function boardView(s) {
       category: f.category,
       text: ['final-question', 'final-reveal', 'end'].includes(s.phase) ? f.q : null,
       image: ['final-question', 'final-reveal'].includes(s.phase) ? f.image || null : null,
+      hasAudio: ['final-question', 'final-reveal'].includes(s.phase) && !!f.audio,
       qAt: s.final.qAt,
       wagered: s.final.ids.filter((id) => s.final.wagers[id] != null),
       answered: s.final.ids.filter((id) => s.final.answers[id] != null),
@@ -508,10 +593,19 @@ export function validateSet(set) {
       c.questions.forEach((q, qi) => {
         if (!q || !q.q) err.push(`${cw}, pytanie ${qi + 1}: brak treści "q".`);
         if (!q || !q.a) err.push(`${cw}, pytanie ${qi + 1}: brak odpowiedzi "a".`);
+        if (q?.audioEnd != null && Number(q.audioEnd) <= (Number(q.audioStart) || 0))
+          err.push(`${cw}, pytanie ${qi + 1}: "audioEnd" musi być większe niż "audioStart".`);
       });
     });
   });
   if (set.final && (!set.final.q || !set.final.a || !set.final.category))
     err.push('Finał: potrzebne "category", "q" i "a".');
+  if (set.rules != null) {
+    if (!Array.isArray(set.rules) || !set.rules.length) err.push('"rules" musi być niepustą listą.');
+    else
+      set.rules.forEach((r, i) => {
+        if (!r?.title || !Array.isArray(r.board) || !r.host) err.push(`Zasada ${i + 1}: potrzebne "title", "board" (lista) i "host".`);
+      });
+  }
   return err;
 }

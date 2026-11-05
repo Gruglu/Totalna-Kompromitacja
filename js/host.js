@@ -1,8 +1,10 @@
 // Panel prowadzącego: trzyma stan gry, rozsyła widoki do streamu i telefonów.
 import * as E from './engine.js';
 import { hostRoom, randomCode } from './net.js';
+import * as media from './media.js';
+import { rulesFor } from './rules.js';
 
-const LS = { set: 'pk.set', state: 'pk.state', code: 'pk.code' };
+const LS = { set: 'pk.set', state: 'pk.state', code: 'pk.code', mediaVer: 'pk.mediaVer' };
 const store = {
   get(k) {
     try {
@@ -39,6 +41,12 @@ let setErrors = [];
 let editing = null; // { kind: 'name'|'score', id }
 let armedNew = false;
 let addingPlayer = false;
+let pendingLoad = null; // { jsons: [{ path, file }], media: [{ path, file }] } gdy w folderze jest kilka JSON-ów
+let mediaMissing = []; // brakujące pliki mediów w wczytanym zestawie
+let mediaCount = 0;
+let mediaVer = Number(store.get(LS.mediaVer)) || 1;
+let audioStat = null; // stan odtwarzacza z okna streamu
+const thumbs = new Map(); // src -> url dla miniatur w panelu
 
 const base = location.href.replace(/[^/]*$/, '');
 const peerParam = new URLSearchParams(location.search).get('peer');
@@ -69,7 +77,9 @@ async function boot() {
     }
   }
   if (!state) state = E.newGame(set);
+  if (!state.media) state.media = { n: 0, cmd: null };
   startRoom();
+  checkMedia();
   render();
   broadcast();
 }
@@ -127,7 +137,7 @@ function undo() {
   state.players.forEach((p) => {
     if (!prev.players.some((x) => x.id === p.id)) prev.players.push({ ...p, score: 0 });
   });
-  state = { ...prev, fx: { n: state.fx.n + 1, type: null } };
+  state = { ...prev, fx: { n: state.fx.n + 1, type: null }, media: state.media };
   persist();
   render();
   broadcast();
@@ -140,13 +150,18 @@ function persist() {
 
 function broadcast() {
   if (!state) return;
-  chan.postMessage({ t: 'state', view: E.boardView(state), joinUrl, code });
+  chan.postMessage({ t: 'state', view: E.boardView(state), joinUrl, code, mediaVer });
   if (!room) return;
   for (const p of state.players) if (!p.manual) room.sendTo(p.id, { t: 'state', view: E.playerView(state, p.id) });
 }
 
 chan.onmessage = (e) => {
   if (e.data?.t === 'hello') broadcast();
+  else if (e.data?.t === 'audio') {
+    const prev = audioStat?.st;
+    audioStat = { ...e.data, at: Date.now() };
+    if (prev !== audioStat.st) renderMain();
+  }
 };
 
 // telefony dostają odświeżenie co 2 s (np. zegar finału)
@@ -163,6 +178,9 @@ const actions = {
   },
   loadSet() {
     document.getElementById('file').click();
+  },
+  loadDir() {
+    document.getElementById('dir').click();
   },
   undo,
   newGame() {
@@ -252,7 +270,8 @@ function renderTop() {
     <div class="room"><span>Pokój</span><b>${code}</b><span class="net">${esc(nets[netStatus] || netStatus)}</span></div>
     <div class="tools">
       <button class="btn" data-a="openStream">Ekran streamu</button>
-      <button class="btn" data-a="loadSet">Wczytaj pytania</button>
+      <button class="btn" data-a="loadDir" title="Folder z plikiem JSON i podfolderem media">Wczytaj folder</button>
+      <button class="btn" data-a="loadSet" title="Plik JSON, można zaznaczyć razem z plikami mediów">Wczytaj pliki</button>
       <button class="btn" data-a="undo" ${history.length ? '' : 'disabled'}>Cofnij <kbd>Ctrl+Z</kbd></button>
       <button class="btn${armedNew ? ' armed' : ''}" data-a="newGame">${armedNew ? 'Na pewno? Kliknij znowu' : 'Nowa gra'}</button>
     </div>`;
@@ -318,11 +337,94 @@ function mainLobby() {
       <div class="panel">
         <span class="label">Pytania</span>
         <div><b style="font-family:var(--f-display);font-size:22px;text-transform:uppercase;color:var(--amber)">${esc(set.title || 'Bez tytułu')}</b></div>
-        <div class="hint">${counts} pytań${set.final ? ' + finał' : ''}. ${set.example ? '<b>To przykładowy zestaw testowy.</b> Wczytaj swój plik JSON przyciskiem u góry.' : 'Zestaw zapisany w tej przeglądarce, nie leży w internecie.'}</div>
+        <div class="hint">${counts} pytań${set.final ? ' + finał' : ''}${set.episode != null ? ` · odcinek ${esc(set.episode)}` : ''}. ${set.example ? '<b>To przykładowy zestaw testowy.</b> Wczytaj swój folder z pytaniami przyciskiem u góry.' : 'Zestaw zapisany w tej przeglądarce, nie leży w internecie.'}</div>
+        ${mediaInfo()}
         ${err}
       </div>
+      ${chooser()}
       <div class="hint">Otwórz <b>Ekran streamu</b> i udostępnij to okno na Discordzie (kliknij w nie raz, żeby włączyć dźwięk, <b>F</b> = pełny ekran). Gracze skanują kod ze streamu albo wchodzą w link. Kolejność graczy na streamie zmieniasz strzałkami.</div>
-      <div class="actions"><button class="btn primary" data-x="start" ${state.players.length ? '' : 'disabled'}>Zaczynamy <kbd>Enter</kbd></button></div>
+      <div class="actions">
+        <button class="btn primary" data-x="opener">Czołówka <kbd>Enter</kbd></button>
+        <button class="btn" data-x="rules">Od razu zasady</button>
+        <button class="btn ghost" data-x="start" ${state.players.length ? '' : 'disabled'}>Bez wstępu, pierwsza runda</button>
+      </div>
+    </div>`;
+}
+
+function plural(n, one, few, many) {
+  if (n === 1) return one;
+  const d = n % 10;
+  const dd = n % 100;
+  return d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? few : many;
+}
+
+function mediaInfo() {
+  const refs = E.mediaRefs(set);
+  if (!refs.length) return '';
+  const img = refs.filter((r) => r.field !== 'audio').length;
+  const aud = refs.filter((r) => r.field === 'audio').length;
+  const miss = mediaMissing.length
+    ? `<div class="err">Brakuje ${mediaMissing.length} ${mediaMissing.length === 1 ? 'pliku' : 'plików'} mediów. Wczytaj cały folder z pytaniami:\n${mediaMissing
+        .slice(0, 10)
+        .map((m) => `${esc(m.where)}: ${esc(m.src)}`)
+        .join('\n')}${mediaMissing.length > 10 ? '\n…' : ''}</div>`
+    : `<div class="hint ok">Media: ${img} ${plural(img, 'obrazek', 'obrazki', 'obrazków')}, ${aud} ${plural(aud, 'klip', 'klipy', 'klipów')} audio. Wszystkie pliki są na miejscu.</div>`;
+  return miss;
+}
+
+function chooser() {
+  if (!pendingLoad) return '';
+  return `<div class="panel">
+    <span class="label">W folderze jest kilka plików z pytaniami. Który gramy?</span>
+    <div class="row">${pendingLoad.jsons.map((j, i) => `<button class="btn" data-pick-json="${i}">${esc(j.path)}</button>`).join('')}</div>
+    <div class="row"><button class="btn ghost small" data-x="cancelLoad">Anuluj</button></div>
+  </div>`;
+}
+
+const WELCOME = [
+  'Dobry wieczór. Witam w Totalnej Kompromitacji, jedynym teleturnieju, w którym przegrana jest gwarantowana, tylko nie wiadomo jeszcze komu.',
+  'Dzisiaj przed nami grupa osób, które z niezrozumiałych powodów uważają, że coś wiedzą. Zaraz to sprawdzimy.',
+  'Zanim zaczniemy, zasady. Słuchajcie uważnie, bo potem nie będzie „a ja nie wiedziałem”.',
+];
+
+function mainOpener() {
+  return `
+    <div class="sec-h"><h2>Czołówka</h2><span class="label">leci na streamie, ok. 11 s</span></div>
+    <div class="qcard">
+      <div class="hint">Na streamie: włączenie kineskopu, log startowy, logo${set.episode != null ? `, odcinek ${esc(set.episode)}` : ''} i lista graczy. Muzyka gra z okna streamu. Gdy skończy, powiedz na powitanie:</div>
+      <div class="script">${WELCOME.map((t) => `<p>${esc(t)}</p>`).join('')}</div>
+      <div class="actions">
+        <button class="btn primary" data-x="rules">Zasady <kbd>Enter</kbd></button>
+        <button class="btn" data-x="opener">Puść jeszcze raz</button>
+        <button class="btn ghost" data-x="start" ${state.players.length ? '' : 'disabled'}>Pomiń zasady</button>
+        <button class="btn ghost small" data-x="toLobby">Wróć do poczekalni</button>
+      </div>
+    </div>`;
+}
+
+function mainRules() {
+  const list = rulesFor(set);
+  const i = state.rule;
+  const r = list[i];
+  const last = i === list.length - 1;
+  return `
+    <div class="sec-h"><h2>Zasady · ${i + 1} z ${list.length}</h2><span class="label">czytaj na głos, na streamie skrót</span></div>
+    <div class="qcard">
+      <div class="rule-h">${esc(r.title)}</div>
+      <div class="script big"><p>${esc(r.host)}</p></div>
+      <div class="rule-board"><span class="label">Na streamie</span>${r.board.map((l) => `<div>&gt; ${esc(l)}</div>`).join('')}</div>
+      <div class="actions">
+        <button class="btn" data-x="rulePrev" ${i ? '' : 'disabled'}>Poprzednia <kbd>←</kbd></button>
+        ${
+          last
+            ? `<button class="btn primary" data-x="start" ${state.players.length ? '' : 'disabled'}>Zaczynamy pierwszą rundę <kbd>Enter</kbd></button>`
+            : `<button class="btn primary" data-x="ruleNext">Następna <kbd>Enter</kbd></button>`
+        }
+        <button class="btn ghost small" data-x="opener">Czołówka</button>
+        <button class="btn ghost small" data-x="toLobby">Wróć do poczekalni</button>
+      </div>
+      <div class="rule-list">${list.map((x, j) => `<button class="${j === i ? 'cur' : j < i ? 'done' : ''}" data-rule="${j}"><span>${String(j + 1).padStart(2, '0')}</span>${esc(x.title)}</button>`).join('')}</div>
+      ${state.players.length ? '' : '<div class="hint">Nie ma jeszcze graczy, więc pierwszej rundy nie da się zacząć.</div>'}
     </div>`;
 }
 
@@ -362,9 +464,60 @@ function questionData() {
 function qBlock(q, reveal = true) {
   const alt = q.alt?.length ? `<div class="alt">Uznaj też: <b>${q.alt.map(esc).join('</b>, <b>')}</b></div>` : '';
   const note = q.note ? `<div class="note"><span class="label">Ciekawostka do komentarza</span>${esc(q.note)}</div>` : '';
-  const img = q.image ? `<div class="qimg"><img src="${esc(q.image)}" alt=""></div>` : '';
-  return `<div class="qtext">${esc(q.q)}</div>${img}
+  const pics = [];
+  if (q.image) pics.push(thumb(q.image, 'Obrazek z pytaniem'));
+  if (q.answerImage) pics.push(thumb(q.answerImage, 'Po odpowiedzi'));
+  const img = pics.length ? `<div class="qimgs">${pics.join('')}</div>` : '';
+  return `<div class="qtext">${esc(q.q)}</div>${img}${q.audio ? audioBlock(q) : ''}
     ${reveal ? `<div class="ans"><div class="k">Odpowiedź</div><div class="a">${esc(q.a)}</div></div>${alt}${note}` : ''}`;
+}
+
+function thumb(src, label) {
+  let u = thumbs.get(src);
+  if (u === undefined) {
+    thumbs.set(src, '');
+    media.resolve(src).then((x) => {
+      thumbs.set(src, x || null);
+      renderMain();
+    });
+    u = '';
+  }
+  const body = u ? `<img src="${esc(u)}" alt="">` : `<div class="miss">${u === null ? 'brak pliku' : '…'}</div>`;
+  return `<figure class="qimg"><figcaption class="label">${esc(label)}</figcaption>${body}</figure>`;
+}
+
+const fmt = (t) => {
+  t = Math.max(0, Math.floor(t || 0));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+};
+const AUDIO_TXT = {
+  ready: 'gotowe, czeka',
+  playing: 'gra na streamie',
+  paused: 'pauza',
+  ended: 'fragment się skończył',
+  missing: 'brak pliku audio, wczytaj folder',
+  error: 'błąd odtwarzania',
+  locked: 'kliknij raz w okno streamu (dźwięk)',
+};
+
+function audioBlock(q) {
+  const live = state.phase !== 'dd';
+  const st = audioStat && audioStat.src === q.audio && Date.now() - audioStat.at < 60000 ? audioStat : null;
+  const txt = !live ? 'muzyka ruszy po ustaleniu stawki' : st ? AUDIO_TXT[st.st] || st.st : 'brak odpowiedzi z okna streamu, czy jest otwarte?';
+  const range = q.audioStart || q.audioEnd ? ` · fragment ${fmt(q.audioStart || 0)}–${q.audioEnd ? fmt(q.audioEnd) : 'koniec'}` : '';
+  const playing = st?.st === 'playing';
+  return `<div class="audio${playing ? ' on' : ''}">
+    <div class="aline"><span class="label">Audio${range}</span><span class="ast${st && ['missing', 'error', 'locked'].includes(st.st) ? ' bad' : ''}">${esc(txt)}</span><span class="atime" id="atime"></span></div>
+    ${
+      live
+        ? `<div class="row">
+      <button class="btn ${playing ? '' : 'primary'}" data-x="aToggle">${playing ? 'Pauza' : 'Graj'} <kbd>M</kbd></button>
+      <button class="btn" data-x="aRestart">Od początku <kbd>R</kbd></button>
+      <button class="btn ghost small" data-x="aStop">Stop</button>
+    </div>`
+        : ''
+    }
+  </div>`;
 }
 
 function mainDD() {
@@ -513,6 +666,8 @@ function renderMain() {
   const ph = state.phase;
   let html;
   if (ph === 'lobby') html = mainLobby();
+  else if (ph === 'opener') html = mainOpener();
+  else if (ph === 'rules') html = mainRules();
   else if (ph === 'round-intro') html = mainIntro();
   else if (ph === 'board') html = mainBoard();
   else if (ph === 'dd') html = mainDD();
@@ -522,7 +677,7 @@ function renderMain() {
   else html = mainEnd();
   html += `<div class="keys">
     <span><kbd>Spacja</kbd> otwórz buzzery</span><span><kbd>D</kbd> dobrze</span><span><kbd>Z</kbd> źle</span><span><kbd>P</kbd> połowa</span>
-    <span><kbd>N</kbd> nikt</span><span><kbd>Enter</kbd> dalej</span><span><kbd>1–6</kbd> zgłoszenie ręczne</span><span><kbd>Ctrl+Z</kbd> cofnij</span></div>`;
+    <span><kbd>N</kbd> nikt</span><span><kbd>Enter</kbd> dalej</span><span><kbd>M</kbd> muzyka graj/pauza</span><span><kbd>R</kbd> od początku</span><span><kbd>1–6</kbd> zgłoszenie ręczne</span><span><kbd>Ctrl+Z</kbd> cofnij</span></div>`;
   $main.innerHTML = html;
 }
 
@@ -553,8 +708,25 @@ function render() {
 
 // ---------- zdarzenia ----------
 
+function isPlaying() {
+  const q = E.currentQuestion(state);
+  return !!(q?.audio && audioStat?.src === q.audio && audioStat.st === 'playing');
+}
+
 const x = {
   start: () => dispatch({ type: 'start' }),
+  opener: () => dispatch({ type: 'opener' }, false),
+  rules: () => dispatch({ type: 'rules', idx: 0 }, false),
+  ruleNext: () => dispatch({ type: 'ruleStep', dir: 1 }, false),
+  rulePrev: () => dispatch({ type: 'ruleStep', dir: -1 }, false),
+  toLobby: () => dispatch({ type: 'lobby' }, false),
+  aToggle: () => dispatch({ type: 'media', cmd: isPlaying() ? 'pause' : 'play' }, false),
+  aRestart: () => dispatch({ type: 'media', cmd: 'restart' }, false),
+  aStop: () => dispatch({ type: 'media', cmd: 'stop' }, false),
+  cancelLoad() {
+    pendingLoad = null;
+    render();
+  },
   next: () => dispatch({ type: 'next' }),
   endRound: () => dispatch({ type: 'endRound' }),
   openBuzz: () => dispatch({ type: 'openBuzz' }),
@@ -595,7 +767,12 @@ document.addEventListener('click', (e) => {
   if (t.dataset.a) actions[t.dataset.a]?.();
   else if (t.dataset.x) x[t.dataset.x]?.();
   else if (t.dataset.p) playerAction(t.dataset.p, t.dataset.id);
-  else if (t.dataset.pickq) {
+  else if (t.dataset.rule) dispatch({ type: 'rules', idx: Number(t.dataset.rule) }, false);
+  else if (t.dataset.pickJson) {
+    const pl = pendingLoad;
+    pendingLoad = null;
+    if (pl) useLoad(pl.jsons[Number(t.dataset.pickJson)], pl.media);
+  } else if (t.dataset.pickq) {
     const [c, q] = t.dataset.pickq.split(':').map(Number);
     dispatch({ type: 'pick', c, q });
   } else if (t.dataset.fw) {
@@ -656,13 +833,23 @@ document.addEventListener('keydown', (e) => {
   if (k === 'enter') {
     e.preventDefault();
     if (document.activeElement?.tagName === 'BUTTON') document.activeElement.blur();
-    if (ph === 'lobby') x.start();
+    if (ph === 'lobby') x.opener();
+    else if (ph === 'opener') x.rules();
+    else if (ph === 'rules') state.rule < rulesFor(set).length - 1 ? x.ruleNext() : x.start();
     else if (ph === 'round-intro' || ph === 'reveal') x.next();
     else if (ph === 'final-intro') x.finalWagers();
     else if (ph === 'final-wager') x.finalQuestion();
     else if (ph === 'final-question') x.finalReveal();
     else if (ph === 'final-reveal') x.fNext();
     return;
+  }
+  if (ph === 'rules') {
+    if (e.key === 'ArrowRight') x.ruleNext();
+    else if (e.key === 'ArrowLeft') x.rulePrev();
+  }
+  if (E.currentQuestion(state)?.audio && ph !== 'dd') {
+    if (k === 'm') return x.aToggle();
+    if (k === 'r') return x.aRestart();
   }
   if (ph === 'question') {
     if (k === 'd') x.right();
@@ -689,13 +876,51 @@ document.addEventListener(
   true
 );
 
-document.getElementById('file').addEventListener('change', async (e) => {
-  const f = e.target.files?.[0];
-  e.target.value = '';
-  if (!f) return;
+// ---------- wczytywanie pytań i mediów ----------
+// "Wczytaj folder": cały folder pytań (JSON + media/). "Wczytaj pliki": JSON, opcjonalnie razem z mediami.
+// Ścieżki mediów w JSON są względne do pliku JSON, np. "media/sw-senat.jpg".
+
+async function onFiles(list) {
+  const files = [...list].map((file) => ({ file, path: (file.webkitRelativePath || file.name).replace(/\\/g, '/') }));
+  if (!files.length) return;
+  const jsons = files.filter((f) => /\.json$/i.test(f.path));
+  const med = files.filter((f) => media.isMediaFile(f.path));
+  if (!jsons.length) {
+    if (med.length) {
+      await storeMedia(med, '');
+      toast(`Wczytano ${med.length} plików mediów`);
+    } else toast('Nie ma tu pliku JSON ani mediów');
+    return;
+  }
+  if (jsons.length > 1) {
+    jsons.sort((a, b) => a.path.localeCompare(b.path, 'pl', { numeric: true }));
+    pendingLoad = { jsons, media: med };
+    if (state.phase !== 'lobby') toast('Kilka plików JSON, wybierz w poczekalni');
+    return render();
+  }
+  useLoad(jsons[0], med);
+}
+
+async function storeMedia(med, dir) {
+  const items = med.map(({ file, path }) => ({ file, path: dir && path.startsWith(dir) ? path.slice(dir.length) : path.split('/').slice(1).join('/') || path }));
+  try {
+    await media.replaceAll(items);
+  } catch (e) {
+    toast('Nie udało się zapisać mediów w przeglądarce');
+    console.warn(e);
+    return;
+  }
+  mediaCount = items.length;
+  mediaVer++;
+  store.set(LS.mediaVer, String(mediaVer));
+  thumbs.clear();
+  media.resetCache();
+}
+
+async function useLoad(j, med) {
   let parsed;
   try {
-    parsed = JSON.parse(await f.text());
+    parsed = JSON.parse(await j.file.text());
   } catch (err) {
     setErrors = [`To nie jest poprawny JSON: ${err.message}`];
     return render();
@@ -707,18 +932,46 @@ document.getElementById('file').addEventListener('change', async (e) => {
     return render();
   }
   setErrors = [];
+  if (parsed.episode == null) {
+    const m = j.path.match(/odcinek[-_ ]?(\d+)/i);
+    if (m) parsed.episode = Number(m[1]);
+  }
+  // media tylko gdy przyszły razem z JSON-em; sam JSON zostawia poprzednio wczytane
+  if (med.length) {
+    const dir = j.path.includes('/') ? j.path.slice(0, j.path.lastIndexOf('/') + 1) : '';
+    await storeMedia(med, dir);
+  }
   set = parsed;
   store.set(LS.set, JSON.stringify(set));
+  await checkMedia();
+  const name = set.title || j.path;
   if (state.phase === 'lobby') {
     state = { ...state, set, title: set.title || state.title };
     persist();
     render();
     broadcast();
-    toast(`Wczytano: ${set.title || f.name}`);
+    toast(`Wczytano: ${name}${med.length ? ` + ${med.length} mediów` : ''}`);
   } else {
+    render();
+    broadcast();
     toast('Wczytano. Nowy zestaw zadziała po „Nowa gra”.');
   }
-});
+}
+
+async function checkMedia() {
+  const refs = E.mediaRefs(set);
+  const out = [];
+  for (const r of refs) if (!(await media.has(r.src))) out.push(r);
+  mediaMissing = out;
+  if (state) renderMain();
+}
+
+for (const id of ['file', 'dir']) {
+  document.getElementById(id).addEventListener('change', (e) => {
+    const list = e.target.files;
+    onFiles(list).finally(() => (e.target.value = ''));
+  });
+}
 
 // ---------- zegar w panelu ----------
 
@@ -742,6 +995,13 @@ document.getElementById('file').addEventListener('change', async (e) => {
     }
     el.textContent = txt;
     el.classList.toggle('low', low);
+  }
+  const at = document.getElementById('atime');
+  if (at) {
+    const st = audioStat;
+    const q = state && E.currentQuestion(state);
+    const txt = st && q?.audio === st.src && st.dur ? `${fmt(st.pos)} / ${fmt(st.dur)}` : '';
+    if (at.textContent !== txt) at.textContent = txt;
   }
   requestAnimationFrame(loop);
 })();
