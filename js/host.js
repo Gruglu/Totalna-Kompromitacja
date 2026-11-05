@@ -351,6 +351,13 @@ function mainLobby() {
     </div>`;
 }
 
+function plural(n, one, few, many) {
+  if (n === 1) return one;
+  const d = n % 10;
+  const dd = n % 100;
+  return d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? few : many;
+}
+
 function mediaInfo() {
   const refs = E.mediaRefs(set);
   if (!refs.length) return '';
@@ -361,7 +368,7 @@ function mediaInfo() {
         .slice(0, 10)
         .map((m) => `${esc(m.where)}: ${esc(m.src)}`)
         .join('\n')}${mediaMissing.length > 10 ? '\n…' : ''}</div>`
-    : `<div class="hint ok">Media: ${img} ${img === 1 ? 'obrazek' : 'obrazków'}, ${aud} audio. Wszystkie pliki są na miejscu.</div>`;
+    : `<div class="hint ok">Media: ${img} ${plural(img, 'obrazek', 'obrazki', 'obrazków')}, ${aud} ${plural(aud, 'klip', 'klipy', 'klipów')} audio. Wszystkie pliki są na miejscu.</div>`;
   return miss;
 }
 
