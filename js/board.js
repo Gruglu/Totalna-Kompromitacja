@@ -2,6 +2,7 @@
 import { ANSWER_SECONDS, FINAL_SECONDS } from './engine.js';
 import * as sound from './sound.js';
 import * as media from './media.js';
+import * as avatars from './avatars.js';
 
 const params = new URLSearchParams(location.search);
 const PREVIEW = params.has('preview');
@@ -25,7 +26,8 @@ const nameOf = (id) => view?.players.find((p) => p.id === id)?.name ?? '?';
 
 chan.onmessage = (e) => {
   const m = e.data;
-  if (m?.t === 'state') {
+  if (m?.t === 'hello-host') reportAvatars(true);
+  else if (m?.t === 'state') {
     const first = !view;
     view = m.view;
     joinUrl = m.joinUrl || joinUrl;
@@ -46,6 +48,27 @@ chan.onmessage = (e) => {
   }
 };
 chan.postMessage({ t: 'hello' });
+
+// mówiące awatary z bota Discorda (bot/); bez bota plansza wygląda jak zwykle
+avatars.start(() => {
+  lastMainKey = '';
+  render();
+  reportAvatars(true);
+});
+let lastAvReport = '';
+function reportAvatars(force) {
+  if (PREVIEW) return;
+  const ps = view?.players || [];
+  const st = {
+    t: 'avatars',
+    on: avatars.isConnected(),
+    missing: avatars.isConnected() ? ps.filter((p) => !avatars.forName(p.name)).map((p) => p.name) : [],
+  };
+  const k = JSON.stringify(st);
+  if (!force && k === lastAvReport) return;
+  lastAvReport = k;
+  chan.postMessage(st);
+}
 setInterval(() => !view && chan.postMessage({ t: 'hello' }), 1000);
 
 // dźwięk wymaga jednego kliknięcia w oknie streamu
@@ -131,7 +154,9 @@ function playerTag(p) {
     const d = p.score - prev;
     delta = `<div class="delta${d < 0 ? ' neg' : ''}">${d > 0 ? '+' : ''}${d}</div>`;
   }
-  return `<div class="${cls}">${delta}<div class="n">${esc(p.name)}</div><div class="s${p.score < 0 ? ' neg' : ''}">${p.score}</div><div class="t">${esc(tag)}</div></div>`;
+  const av = avatars.html(p.name);
+  if (av) cls += ' has-av';
+  return `<div class="${cls}">${delta}${av}<div class="n">${esc(p.name)}</div><div class="s${p.score < 0 ? ' neg' : ''}">${p.score}</div><div class="t">${esc(tag)}</div></div>`;
 }
 
 function lower() {
@@ -223,7 +248,7 @@ function openerHTML() {
   const cast = v.players
     .map(
       (p, i) =>
-        `<div class="who" style="--d:${OPENER.cast + 0.5 + i * OPENER.castStep}s"><span class="no">${String(i + 1).padStart(2, '0')}</span><span class="nm">${esc(p.name)}</span><span class="sn">${esc(pool[i % pool.length])}</span></div>`
+        `<div class="who${avatars.forName(p.name) ? ' has-av' : ''}" style="--d:${OPENER.cast + 0.5 + i * OPENER.castStep}s">${avatars.html(p.name)}<span class="no">${String(i + 1).padStart(2, '0')}</span><span class="nm">${esc(p.name)}</span><span class="sn">${esc(pool[i % pool.length])}</span></div>`
     )
     .join('');
   const castEnd = OPENER.cast + 0.5 + n * OPENER.castStep + 0.4;
@@ -453,7 +478,7 @@ function main() {
       <div class="rank">${sorted
         .map(
           (p, i) =>
-            `<div class="row${i === 0 ? ' first' : ''}${i === sorted.length - 1 && sorted.length > 1 ? ' last' : ''}" style="--i:${sorted.length - 1 - i}"><span class="pos">${i + 1}.</span><span class="nm">${esc(p.name)}</span><span class="sc${p.score < 0 ? ' neg' : ''}">${p.score}</span></div>`
+            `<div class="row${i === 0 ? ' first' : ''}${i === sorted.length - 1 && sorted.length > 1 ? ' last' : ''}" style="--i:${sorted.length - 1 - i}"><span class="pos">${i + 1}.</span>${avatars.html(p.name)}<span class="nm">${esc(p.name)}</span><span class="sc${p.score < 0 ? ' neg' : ''}">${p.score}</span></div>`
         )
         .join('')}</div>
     </div>`;
@@ -489,6 +514,8 @@ function render() {
     }
   }
   lastPhaseKey = phaseKey;
+  avatars.refresh();
+  reportAvatars();
   tick();
 }
 

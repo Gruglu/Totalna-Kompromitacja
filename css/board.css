@@ -272,3 +272,31 @@ html, body { height: 100%; overflow: hidden; background: #000; }
 .newnick { display: flex; align-items: stretch; }
 .newnick span { background: var(--tally); color: var(--screen); font-family: var(--f-display); font-weight: 900; font-size: 1.8cqw; text-transform: uppercase; padding: 0.6cqw 1.2cqw; display: flex; align-items: center; }
 .newnick b { border: 0.2cqw solid var(--tally); border-left: 0; font-family: var(--f-crt); font-weight: 400; font-size: 5cqw; line-height: 1; color: var(--hot); text-shadow: var(--glow); padding: 0.4cqw 1.6cqw; }
+
+/* mówiące awatary (bot Discorda, js/avatars.js) */
+.av { position: relative; aspect-ratio: 1; overflow: hidden; background: var(--cell); border: 0.18cqw solid var(--line); transition: border-color 0.08s, box-shadow 0.08s; }
+.av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.av .o { visibility: hidden; }
+.av.talk { border-color: var(--amber); box-shadow: 0 0 0.9cqw rgba(255, 178, 46, 0.65), 0 0 2.4cqw rgba(255, 178, 46, 0.25); animation: avbob 0.36s steps(2) infinite; }
+.av.talk .o { visibility: visible; }
+.av.talk .c { visibility: hidden; }
+@keyframes avbob { 50% { transform: translateY(-0.12cqw); } }
+
+.p.has-av { grid-template-columns: auto 1fr auto; padding-left: 0.9cqw; }
+.p.has-av .av { grid-row: 1 / span 2; align-self: center; width: 4.4cqw; }
+.p.has-av .t { grid-column: 2 / -1; }
+.p.talking .n { color: var(--amber); text-shadow: var(--glow); }
+.p.talking { box-shadow: inset 0.3cqw 0 0 var(--amber); }
+.p.buzz.talking { box-shadow: inset 0 0.4cqw 0 var(--tally), inset 0.3cqw 0 0 var(--amber); }
+.p.pick .av { border-color: var(--screen); }
+.p.pick .av.talk { box-shadow: 0 0 0 0.18cqw var(--screen); }
+.p.pick.talking { box-shadow: none; }
+.p.pick.talking .n { color: var(--screen); text-shadow: none; }
+
+.o-who .who.has-av { grid-template-columns: auto auto 1fr; align-items: center; }
+.o-who .who.has-av .av { grid-row: 1 / span 2; width: 5cqw; }
+.o-who .who.has-av .sn { grid-column: 2 / -1; }
+
+.rank .row:has(.av) { grid-template-columns: 5cqw auto 1fr auto; align-items: center; }
+.rank .row .av { width: 4cqw; }
+.rank .row.first .av { border-color: var(--screen); }

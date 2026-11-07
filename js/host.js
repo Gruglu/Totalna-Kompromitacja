@@ -47,6 +47,7 @@ let mediaMissing = []; // brakujące pliki mediów w wczytanym zestawie
 let mediaCount = 0;
 let mediaVer = Number(store.get(LS.mediaVer)) || 1;
 let audioStat = null; // stan odtwarzacza z okna streamu
+let avStat = null; // mówiące awatary: czy ekran streamu widzi bota Discorda
 const thumbs = new Map(); // src -> url dla miniatur w panelu
 let season = S.load(); // ranking sezonu, osobno od stanu gry (przetrwa „Nowa gra”)
 let shameWho = null; // kogo dotyczy wpis do Hall of Shame
@@ -171,12 +172,16 @@ function broadcast() {
 
 chan.onmessage = (e) => {
   if (e.data?.t === 'hello') broadcast();
-  else if (e.data?.t === 'audio') {
+  else if (e.data?.t === 'avatars') {
+    avStat = e.data;
+    if (state?.phase === 'lobby') renderMain();
+  } else if (e.data?.t === 'audio') {
     const prev = audioStat?.st;
     audioStat = { ...e.data, at: Date.now() };
     if (prev !== audioStat.st) renderMain();
   }
 };
+chan.postMessage({ t: 'hello-host' }); // okno streamu odeśle stan awatarów
 
 // telefony dostają odświeżenie co 2 s (np. zegar finału)
 setInterval(() => {
@@ -357,6 +362,7 @@ function mainLobby() {
       </div>
       ${chooser()}
       ${seasonPanel()}
+      ${avatarInfo()}
       <div class="hint">Otwórz <b>Ekran streamu</b> i udostępnij to okno na Discordzie (kliknij w nie raz, żeby włączyć dźwięk, <b>F</b> = pełny ekran). Gracze skanują kod ze streamu albo wchodzą w link. Kolejność graczy na streamie zmieniasz strzałkami.</div>
       <div class="actions">
         <button class="btn primary" data-x="opener">Czołówka <kbd>Enter</kbd></button>
@@ -364,6 +370,15 @@ function mainLobby() {
         <button class="btn ghost" data-x="start" ${state.players.length ? '' : 'disabled'}>Bez wstępu, pierwsza runda</button>
       </div>
     </div>`;
+}
+
+function avatarInfo() {
+  if (!avStat?.on) return '';
+  const miss = avStat.missing || [];
+  const txt = miss.length
+    ? `Bez awatara: <b>${miss.map(esc).join(', ')}</b>. Nick w grze musi się zgadzać z polem <b>nick</b> w config.json bota.`
+    : 'Wszyscy gracze mają awatar.';
+  return `<div class="hint">Mówiące awatary: bot Discorda połączony. ${txt}</div>`;
 }
 
 function plural(n, one, few, many) {
