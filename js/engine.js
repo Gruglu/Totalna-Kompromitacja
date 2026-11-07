@@ -1,5 +1,5 @@
 // Silnik gry: czyste funkcje na stanie. Prowadzący (host.html) trzyma stan,
-// ekran streamu i telefony dostają tylko widoki bez odpowiedzi.
+// plansza u graczy i ich buzzery dostają tylko widoki bez odpowiedzi.
 
 export const ANSWER_SECONDS = 5;
 export const FINAL_SECONDS = 30;
@@ -58,7 +58,7 @@ function fx(s, type) {
   s.fx = { n: s.fx.n + 1, type };
 }
 
-// polecenie dla odtwarzacza audio na streamie (graj / pauza / od nowa / stop)
+// polecenie dla odtwarzacza audio u graczy (graj / pauza / od nowa / stop)
 function mediaCmd(s, cmd) {
   const m = s.media || { n: 0 };
   s.media = { n: m.n + 1, cmd, at: now() };

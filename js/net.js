@@ -46,7 +46,7 @@ export function hostRoom(code, { onStatus, onJoin, onMessage, onLeave }) {
         if (msg.t === 'pong') return;
         if (msg.t === 'join') {
           entry.token = String(msg.token || '').slice(0, 64);
-          onJoin?.(entry.token, String(msg.name || '').slice(0, 24), conn);
+          onJoin?.(entry.token, String(msg.name || '').slice(0, 24), conn, { viewer: !!msg.viewer });
           return;
         }
         if (entry.token) onMessage?.(entry.token, msg);
@@ -88,7 +88,7 @@ export function hostRoom(code, { onStatus, onJoin, onMessage, onLeave }) {
         e.conn.close();
         conns.delete(id);
         if (e.token && ![...conns.values()].some((x) => x.token === e.token)) onLeave?.(e.token);
-      } else if (e.conn.open) e.conn.send({ t: 'ping' });
+      } else if (e.conn.open) e.conn.send({ t: 'ping', now: Date.now() });
     }
   }, 3000);
 
@@ -116,7 +116,7 @@ export function hostRoom(code, { onStatus, onJoin, onMessage, onLeave }) {
 
 // ---------- gracz ----------
 
-export function joinRoom(code, token, name, { onStatus, onMessage }) {
+export function joinRoom(code, token, name, { onStatus, onMessage, viewer = false, onPing }) {
   let peer = null;
   let conn = null;
   let destroyed = false;
@@ -155,11 +155,14 @@ export function joinRoom(code, token, name, { onStatus, onMessage }) {
     c.on('open', () => {
       lastSeen = Date.now();
       onStatus?.('open');
-      c.send({ t: 'join', token, name });
+      c.send({ t: 'join', token, name, viewer });
     });
     c.on('data', (msg) => {
       lastSeen = Date.now();
-      if (msg?.t === 'ping') return c.send({ t: 'pong' });
+      if (msg?.t === 'ping') {
+        onPing?.(msg);
+        return c.send({ t: 'pong' });
+      }
       if (msg?.t === 'kicked') {
         destroyed = true;
         onStatus?.('kicked');
@@ -197,7 +200,7 @@ export function joinRoom(code, token, name, { onStatus, onMessage }) {
     },
     rename(n) {
       name = n;
-      this.send({ t: 'join', token, name });
+      this.send({ t: 'join', token, name, viewer });
     },
     destroy() {
       destroyed = true;

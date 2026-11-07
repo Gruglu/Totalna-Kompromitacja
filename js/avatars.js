@@ -49,7 +49,48 @@ export function refresh() {
   }
 }
 
-export function start(cb) {
+// Wiadomość od bota (albo przekazana przez prowadzącego telefonom graczy).
+export function feed(m) {
+  if (!m || typeof m !== 'object') return;
+  if (m.t === 'hello') {
+    byNick.clear();
+    speaking.clear();
+    for (const p of m.players || []) for (const n of p.nicks || []) byNick.set(norm(n), { key: p.key, closed: p.closed, open: p.open });
+    for (const k of m.speaking || []) speaking.add(k);
+    connected = true;
+    onChange();
+  } else if (m.t === 'speak') {
+    if (m.on) speaking.add(m.key);
+    else speaking.delete(m.key);
+    apply(m.key);
+  } else if (m.t === 'bye') {
+    // bot padł: awatary zostają (bez ruszania ustami)
+    const was = connected;
+    connected = false;
+    speaking.clear();
+    refresh();
+    if (was) onChange();
+  }
+}
+
+// Telefon gracza: awatary przychodzą od prowadzącego, bez łączenia z botem.
+export function relayed(cb) {
+  onChange = cb || onChange;
+}
+
+// Stan do przekazania dalej (np. graczowi, który dołączył później).
+export function snapshot() {
+  if (!connected) return null;
+  const players = new Map();
+  for (const [nick, a] of byNick) {
+    if (!players.has(a.key)) players.set(a.key, { key: a.key, nicks: [], closed: a.closed, open: a.open });
+    players.get(a.key).nicks.push(nick);
+  }
+  return { t: 'hello', players: [...players.values()], speaking: [...speaking] };
+}
+
+// onRaw: dostaje każdą wiadomość od bota (prowadzący przekazuje je graczom)
+export function start(cb, onRaw) {
   onChange = cb || onChange;
   if (!PORT) return;
   let ws;
@@ -67,27 +108,15 @@ export function start(cb) {
       } catch {
         return;
       }
-      if (m.t === 'hello') {
-        byNick.clear();
-        speaking.clear();
-        for (const p of m.players || []) for (const n of p.nicks || []) byNick.set(norm(n), { key: p.key, closed: p.closed, open: p.open });
-        for (const k of m.speaking || []) speaking.add(k);
-        connected = true;
-        wait = 1000;
-        onChange();
-      } else if (m.t === 'speak') {
-        if (m.on) speaking.add(m.key);
-        else speaking.delete(m.key);
-        apply(m.key);
-      }
+      if (m.t === 'hello') wait = 1000;
+      feed(m);
+      if (m.t === 'hello' || m.t === 'speak') onRaw?.(m);
     };
     ws.onclose = () => {
-      const was = connected;
-      connected = false;
-      // awatary zostają (bez ruszania ustami), gdyby bot padł w trakcie odcinka
-      speaking.clear();
-      refresh();
-      if (was) onChange();
+      if (connected) {
+        feed({ t: 'bye' });
+        onRaw?.({ t: 'bye' });
+      }
       // bot pewnie jeszcze nie działa; próbujemy co kilka sekund, po cichu
       setTimeout(connect, wait);
       wait = Math.min(wait * 2, 8000);

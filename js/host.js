@@ -1,9 +1,10 @@
-// Panel prowadzącego: trzyma stan gry, rozsyła widoki do streamu i telefonów.
+// Panel prowadzącego: trzyma stan gry, rozsyła planszę i widoki na urządzenia graczy.
 import * as E from './engine.js';
 import { hostRoom, randomCode } from './net.js';
 import * as media from './media.js';
 import { rulesFor } from './rules.js';
 import * as S from './season.js';
+import * as avatars from './avatars.js';
 
 const LS = { set: 'pk.set', state: 'pk.state', code: 'pk.code', mediaVer: 'pk.mediaVer' };
 const store = {
@@ -45,9 +46,11 @@ let addingPlayer = false;
 let pendingLoad = null; // { jsons: [{ path, file }], media: [{ path, file }] } gdy w folderze jest kilka JSON-ów
 let mediaMissing = []; // brakujące pliki mediów w wczytanym zestawie
 let mediaCount = 0;
-let mediaVer = Number(store.get(LS.mediaVer)) || 1;
-let audioStat = null; // stan odtwarzacza z okna streamu
-let avStat = null; // mówiące awatary: czy ekran streamu widzi bota Discorda
+let mediaVer = store.get(LS.mediaVer) || newMediaVer();
+store.set(LS.mediaVer, mediaVer);
+let audioStat = null; // stan odtwarzacza z podglądu albo osobnego okna planszy
+const viewers = new Map(); // token -> nazwa urządzenia, które tylko ogląda planszę
+const devices = new Map(); // token -> { sig, media: {have,total}, audio: {st,src} } urządzenia graczy i widzów
 const thumbs = new Map(); // src -> url dla miniatur w panelu
 let season = S.load(); // ranking sezonu, osobno od stanu gry (przetrwa „Nowa gra”)
 let shameWho = null; // kogo dotyczy wpis do Hall of Shame
@@ -56,6 +59,45 @@ let shameDraft = '';
 let shameManual = false;
 let shameOpen = false; // czy pole Hall of Shame jest rozwinięte w trakcie gry // wpisywany tekst, przetrwa przerysowanie panelu
 let armedDel = null; // numer odcinka sezonu do usunięcia (drugie kliknięcie)
+
+// podgląd planszy w panelu: rozmiar, dźwięk u prowadzącego, wygląd telefonu
+const prefs = { size: 'm', sound: true, phone: false };
+try {
+  Object.assign(prefs, JSON.parse(store.get('pk.preview') || '{}'));
+} catch {}
+const $pv = document.getElementById('pv');
+function pv() {
+  try {
+    return $pv?.contentWindow?.__preview || null;
+  } catch {
+    return null;
+  }
+}
+function applyPrefs() {
+  store.set('pk.preview', JSON.stringify(prefs));
+  document.body.dataset.pv = prefs.size;
+  document.body.classList.toggle('pv-phone', prefs.phone);
+  const p = pv();
+  p?.setSound(prefs.sound);
+  p?.setPhone(prefs.phone);
+  if (!prefs.sound) audioStat = null;
+  const lab = { s: 'mały', m: 'średni', l: 'duży' };
+  const box = document.getElementById('pv-tools');
+  if (box)
+    box.innerHTML = `<button class="btn small ghost" data-a="previewSize" title="Rozmiar podglądu">Podgląd: ${lab[prefs.size]}</button>
+      <button class="btn small ${prefs.sound ? '' : 'ghost'}" data-a="previewSound" title="Muzyka i efekty z pytań grają też u Ciebie">${prefs.sound ? 'Dźwięk u mnie: wł.' : 'Dźwięk u mnie: wył.'}</button>
+      <button class="btn small ${prefs.phone ? '' : 'ghost'}" data-a="previewPhone" title="Jak to wygląda na telefonie w pionie">${prefs.phone ? 'Widok: telefon' : 'Widok: komputer'}</button>`;
+  if (state) renderMain();
+}
+$pv?.addEventListener('load', applyPrefs);
+// dźwięk w podglądzie wymaga gestu: pierwsze kliknięcie albo klawisz w panelu go odblokowuje
+const unlockPreview = () => prefs.sound && pv()?.unlock();
+document.addEventListener('pointerdown', unlockPreview, true);
+document.addEventListener('keydown', unlockPreview, true);
+
+function newMediaVer() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
 
 const base = location.href.replace(/[^/]*$/, '');
 const peerParam = new URLSearchParams(location.search).get('peer');
@@ -102,15 +144,27 @@ function startRoom() {
       netStatus = s;
       renderTop();
     },
-    onJoin(token, name) {
+    onJoin(token, name, conn, info) {
+      devices.set(token, { sig: null, media: null, audio: null });
+      if (info?.viewer) {
+        viewers.set(token, name || 'ekran');
+        sendTo(token);
+        renderPlayers();
+        return;
+      }
+      viewers.delete(token);
       const exists = state.players.some((p) => p.id === token);
       dispatch({ type: 'addPlayer', id: token, name: exists ? E.player(state, token).name : name || 'Gracz', connected: true }, false);
       if (!exists && state.phase !== 'lobby') toast(`${name} dołącza w trakcie gry`);
     },
     onLeave(token) {
+      devices.delete(token);
+      if (viewers.delete(token)) return renderPlayers();
       dispatch({ type: 'setConnected', id: token, connected: false }, false);
     },
     onMessage(token, m) {
+      if (m.t === 'media-get') return sendMediaFile(token, m);
+      if (m.t === 'media-have' || m.t === 'astat') return deviceInfo(token, m);
       if (!E.player(state, token)) return;
       if (m.t === 'buzz') dispatch({ type: 'buzz', id: token }, true);
       else if (m.t === 'rename' && state.phase === 'lobby') dispatch({ type: 'renamePlayer', id: token, name: String(m.name).slice(0, 24) }, false);
@@ -161,27 +215,139 @@ function persist() {
   store.set(LS.state, JSON.stringify(state));
 }
 
-function broadcast() {
-  if (!state) return;
+function boardView() {
   const view = E.boardView(state);
   if (view.screen === 'season') view.season = S.view(season);
-  chan.postMessage({ t: 'state', view, joinUrl, code, mediaVer });
-  if (!room) return;
-  for (const p of state.players) if (!p.manual) room.sendTo(p.id, { t: 'state', view: E.playerView(state, p.id) });
+  return view;
 }
+
+function broadcast() {
+  if (!state) return;
+  const full = boardView();
+  chan.postMessage({ t: 'state', view: full, joinUrl, code, mediaVer });
+  if (!room) return;
+  const board = playersBoard(full);
+  for (const p of state.players) if (!p.manual) sendTo(p.id, board);
+  for (const t of viewers.keys()) sendTo(t, board);
+}
+
+// Gracz dostaje swój widok (buzzer, zakłady) i planszę; widz tylko planszę.
+// Przed pierwszym stanem i po zmianie pytań idzie lista plików mediów do pobrania.
+function sendTo(token, board = playersBoard(boardView())) {
+  if (!room) return;
+  const d = devices.get(token);
+  const list = mediaList();
+  const sig = mediaVer + '|' + list.join('|');
+  if (d && d.sig !== sig) {
+    d.sig = sig;
+    room.sendTo(token, { t: 'media-list', ver: mediaVer, items: list });
+    const av = avatars.snapshot();
+    if (av) room.sendTo(token, { t: 'avatars', m: av });
+  }
+  const isPlayer = state.players.some((p) => p.id === token);
+  room.sendTo(token, {
+    t: 'state',
+    view: isPlayer ? E.playerView(state, token) : null,
+    board,
+    joinUrl,
+    code,
+    mediaVer,
+    now: Date.now(),
+  });
+}
+
+// Media dla graczy idą pod losowymi nazwami i zaszyfrowane; klucz do pliku jest w widoku
+// planszy tylko wtedy, gdy plik jest na planszy (pytanie, obrazek z odpowiedzią przy odsłonięciu).
+// Dzięki temu urządzenia pobierają wszystko z góry, a nikt nie podejrzy pytań w narzędziach przeglądarki.
+let secrets = null; // { ver, files: { src: { id, k } } }
+function secretFor(src) {
+  if (!secrets || secrets.ver !== mediaVer) {
+    try {
+      secrets = JSON.parse(store.get('pk.mediaKeys') || 'null');
+    } catch {
+      secrets = null;
+    }
+    if (!secrets || secrets.ver !== mediaVer) secrets = { ver: mediaVer, files: {} };
+  }
+  let f = secrets.files[src];
+  if (!f) {
+    const rnd = (n) => crypto.getRandomValues(new Uint8Array(n));
+    f = {
+      id: 'm' + Array.from(rnd(6), (b) => b.toString(16).padStart(2, '0')).join(''),
+      k: btoa(String.fromCharCode(...rnd(16))),
+    };
+    secrets.files[src] = f;
+    store.set('pk.mediaKeys', JSON.stringify(secrets));
+  }
+  return f;
+}
+
+function mediaSrcs() {
+  return [...new Set(E.mediaRefs(state?.set || set).map((r) => r.src))].filter((s) => !media.isExternal(s));
+}
+function mediaList() {
+  return mediaSrcs().map((s) => secretFor(s).id);
+}
+
+// plansza dla urządzeń graczy: ścieżki plików zamienione na losowe id + klucze do tego, co widać
+function playersBoard(board) {
+  const b = { ...board, mediaKeys: {} };
+  const map = (src) => {
+    if (!src || media.isExternal(src)) return src;
+    const f = secretFor(src);
+    b.mediaKeys[f.id] = f.k;
+    return f.id;
+  };
+  if (b.cur) b.cur = { ...b.cur, image: map(b.cur.image) };
+  if (b.answerImage) b.answerImage = map(b.answerImage);
+  if (b.audio) b.audio = { ...b.audio, src: map(b.audio.src) };
+  if (b.final) b.final = { ...b.final, image: map(b.final.image) };
+  return b;
+}
+
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function sendMediaFile(token, m) {
+  const id = String(m.id || '');
+  const src = m.ver === mediaVer ? mediaSrcs().find((s) => secretFor(s).id === id) : null;
+  if (!src) return room.sendTo(token, { t: 'media-file', ver: m.ver, id, missing: true });
+  const f = await media.source(src);
+  if (f?.blob) {
+    const sec = secretFor(src);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await crypto.subtle.importKey('raw', b64(sec.k), 'AES-GCM', false, ['encrypt']);
+    const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await f.blob.arrayBuffer());
+    room.sendTo(token, { t: 'media-file', ver: mediaVer, id, iv: btoa(String.fromCharCode(...iv)), type: f.blob.type, data });
+  } else room.sendTo(token, { t: 'media-file', ver: mediaVer, id, url: f?.url || null, missing: !f });
+}
+
+function deviceInfo(token, m) {
+  const d = devices.get(token);
+  if (!d) return;
+  if (m.t === 'media-have') d.media = { have: Number(m.have) || 0, total: Number(m.total) || 0, ver: m.ver };
+  else d.audio = { st: String(m.st || ''), src: m.src };
+  renderPlayers();
+  if (m.t === 'astat' && E.currentQuestion(state)?.audio) renderMain();
+}
+
+// mówiące awatary: prowadzący łączy się z botem i przekazuje wszystko graczom
+avatars.start(
+  () => {
+    if (state?.phase === 'lobby') renderMain();
+  },
+  (m) => {
+    if (!room) return;
+    for (const t of [...state.players.map((p) => p.id), ...viewers.keys()]) room.sendTo(t, { t: 'avatars', m });
+  }
+);
 
 chan.onmessage = (e) => {
   if (e.data?.t === 'hello') broadcast();
-  else if (e.data?.t === 'avatars') {
-    avStat = e.data;
-    if (state?.phase === 'lobby') renderMain();
-  } else if (e.data?.t === 'audio') {
+  else if (e.data?.t === 'audio') {
     const prev = audioStat?.st;
     audioStat = { ...e.data, at: Date.now() };
     if (prev !== audioStat.st) renderMain();
   }
 };
-chan.postMessage({ t: 'hello-host' }); // okno streamu odeśle stan awatarów
 
 // telefony dostają odświeżenie co 2 s (np. zegar finału)
 setInterval(() => {
@@ -194,6 +360,19 @@ const actions = {
   openStream() {
     const w = window.open('board.html', 'pk-stream', 'width=1280,height=720');
     if (!w) toast('Przeglądarka zablokowała okno. Otwórz board.html ręcznie.');
+  },
+  previewSize() {
+    const order = ['s', 'm', 'l'];
+    prefs.size = order[(order.indexOf(prefs.size) + 1) % order.length];
+    applyPrefs();
+  },
+  previewSound() {
+    prefs.sound = !prefs.sound;
+    applyPrefs();
+  },
+  previewPhone() {
+    prefs.phone = !prefs.phone;
+    applyPrefs();
   },
   loadSet() {
     document.getElementById('file').click();
@@ -285,10 +464,10 @@ function renderTop() {
     'id-taken': 'kod jeszcze zajęty, ponawiam…',
   };
   $top.innerHTML = `
-    <div class="logo">${esc(state.title)}<small>panel prowadzącego · tego nie streamuj</small></div>
+    <div class="logo">${esc(state.title)}<small>panel prowadzącego · tego gracze nie widzą</small></div>
     <div class="room"><span>Pokój</span><b>${code}</b><span class="net">${esc(nets[netStatus] || netStatus)}</span></div>
     <div class="tools">
-      <button class="btn" data-a="openStream">Ekran streamu</button>
+      <button class="btn" data-a="openStream" title="Opcjonalne: plansza w osobnym oknie, np. na drugi monitor">Osobne okno planszy</button>
       <button class="btn" data-a="loadDir" title="Folder z plikiem JSON i podfolderem media">Wczytaj folder</button>
       <button class="btn" data-a="loadSet" title="Plik JSON, można zaznaczyć razem z plikami mediów">Wczytaj pliki</button>
       <button class="btn" data-a="undo" ${history.length ? '' : 'disabled'}>Cofnij <kbd>Ctrl+Z</kbd></button>
@@ -321,23 +500,36 @@ function renderPlayers() {
       if (s.phase !== 'lobby' && s.picker !== p.id) acts.push(`<button class="btn small ghost" data-p="pick" data-id="${esc(p.id)}">Niech wybiera</button>`);
       if (qOpen && !tried) acts.push(`<button class="btn small danger" data-p="buzz" data-id="${esc(p.id)}">Zgłasza się <kbd>${i + 1}</kbd></button>`);
       if (s.phase === 'lobby') {
-        acts.push(`<button class="btn small ghost" data-p="up" data-id="${esc(p.id)}" ${i ? '' : 'disabled'} title="W lewo na streamie">↑</button>`);
-        acts.push(`<button class="btn small ghost" data-p="down" data-id="${esc(p.id)}" ${i < s.players.length - 1 ? '' : 'disabled'} title="W prawo na streamie">↓</button>`);
+        acts.push(`<button class="btn small ghost" data-p="up" data-id="${esc(p.id)}" ${i ? '' : 'disabled'} title="W lewo na planszy">↑</button>`);
+        acts.push(`<button class="btn small ghost" data-p="down" data-id="${esc(p.id)}" ${i < s.players.length - 1 ? '' : 'disabled'} title="W prawo na planszy">↓</button>`);
         acts.push(`<button class="btn small danger ghost" data-p="remove" data-id="${esc(p.id)}">Usuń</button>`);
       }
       const tag = p.manual ? 'bez telefonu' : p.connected ? 'online' : 'offline';
-      return `<div class="${cls}"><span class="num">${i + 1}</span>${nm}${sc}<div class="acts">${acts.join('')}<span class="tag" style="margin-left:auto;align-self:center">${tag}</span></div></div>`;
+      return `<div class="${cls}"><span class="num">${i + 1}</span>${nm}${sc}<div class="acts">${acts.join('')}<span class="tag" style="margin-left:auto;align-self:center">${tag}</span></div>${devTag(p)}</div>`;
     })
     .join('');
   const add = addingPlayer
     ? `<div class="row"><input class="field" id="newplayer" placeholder="Nick gracza bez telefonu" maxlength="24"><button class="btn small primary" data-x="addPlayerOk">Dodaj</button></div>`
     : `<button class="btn small ghost" data-x="addPlayer">+ Gracz bez telefonu</button>`;
+  const vw = viewers.size ? `<div class="viewers">Tylko oglądają: ${[...viewers.values()].map(esc).join(', ')}</div>` : '';
   $players.innerHTML = `
     <div>
       <div class="sec-h"><h2>Gracze</h2><span class="label">${s.players.length} / 6</span></div>
       <div class="plist">${html || '<div class="hint">Nikt jeszcze nie dołączył.</div>'}</div>
       <div style="margin-top:8px">${add}</div>
+      ${vw}
     </div>`;
+}
+
+// stan urządzenia gracza: czy ma już wszystkie media odcinka
+function devTag(p) {
+  if (p.manual || !p.connected) return '';
+  const d = devices.get(p.id);
+  const m = d?.media;
+  if (!m || m.ver !== mediaVer) return '';
+  if (!m.total) return '';
+  if (m.have >= m.total) return `<span class="dev ok" style="grid-column:1/-1">media ${m.have}/${m.total}, gotowe</span>`;
+  return `<span class="dev" style="grid-column:1/-1">pobiera media ${m.have}/${m.total}</span>`;
 }
 
 function mainLobby() {
@@ -363,7 +555,7 @@ function mainLobby() {
       ${chooser()}
       ${seasonPanel()}
       ${avatarInfo()}
-      <div class="hint">Otwórz <b>Ekran streamu</b> i udostępnij to okno na Discordzie (kliknij w nie raz, żeby włączyć dźwięk, <b>F</b> = pełny ekran). Gracze skanują kod ze streamu albo wchodzą w link. Kolejność graczy na streamie zmieniasz strzałkami.</div>
+      <div class="hint">Gracze wchodzą w link na telefonie albo komputerze i widzą planszę u siebie, razem z obrazkami i muzyką. Streamowanie nie jest potrzebne. Najlepiej: plansza na komputerze, buzzer na telefonie (gracz wchodzi na komputerze, a telefon paruje kodem QR z dołu swojego ekranu), albo wszystko na jednym telefonie. Podgląd obok pokazuje dokładnie to, co widzą. Kolejność graczy na planszy zmieniasz strzałkami.</div>
       <div class="actions">
         <button class="btn primary" data-x="opener">Czołówka <kbd>Enter</kbd></button>
         <button class="btn" data-x="rules">Od razu zasady</button>
@@ -373,8 +565,8 @@ function mainLobby() {
 }
 
 function avatarInfo() {
-  if (!avStat?.on) return '';
-  const miss = avStat.missing || [];
+  if (!avatars.isConnected()) return '';
+  const miss = state.players.filter((p) => !avatars.forName(p.name)).map((p) => p.name);
   const txt = miss.length
     ? `Bez awatara: <b>${miss.map(esc).join(', ')}</b>. Nick w grze musi się zgadzać z polem <b>nick</b> w config.json bota.`
     : 'Wszyscy gracze mają awatar.';
@@ -419,9 +611,9 @@ const WELCOME = [
 
 function mainOpener() {
   return `
-    <div class="sec-h"><h2>Czołówka</h2><span class="label">leci na streamie, ok. 11 s</span></div>
+    <div class="sec-h"><h2>Czołówka</h2><span class="label">leci u graczy, ok. 11 s</span></div>
     <div class="qcard">
-      <div class="hint">Na streamie: włączenie kineskopu, log startowy, logo${set.episode != null ? `, odcinek ${esc(set.episode)}` : ''} i lista graczy. Muzyka gra z okna streamu. Gdy skończy, powiedz na powitanie:</div>
+      <div class="hint">U graczy: włączenie kineskopu, log startowy, logo${set.episode != null ? `, odcinek ${esc(set.episode)}` : ''} i lista graczy. Muzyka gra na ich urządzeniach. Gdy skończy, powiedz na powitanie:</div>
       <div class="script">${WELCOME.map((t) => `<p>${esc(t)}</p>`).join('')}</div>
       <div class="actions">
         <button class="btn primary" data-x="rules">Zasady <kbd>Enter</kbd></button>
@@ -438,11 +630,11 @@ function mainRules() {
   const r = list[i];
   const last = i === list.length - 1;
   return `
-    <div class="sec-h"><h2>Zasady · ${i + 1} z ${list.length}</h2><span class="label">czytaj na głos, na streamie skrót</span></div>
+    <div class="sec-h"><h2>Zasady · ${i + 1} z ${list.length}</h2><span class="label">czytaj na głos, gracze widzą skrót</span></div>
     <div class="qcard">
       <div class="rule-h">${esc(r.title)}</div>
       <div class="script big"><p>${esc(r.host)}</p></div>
-      <div class="rule-board"><span class="label">Na streamie</span>${r.board.map((l) => `<div>&gt; ${esc(l)}</div>`).join('')}</div>
+      <div class="rule-board"><span class="label">Na planszy</span>${r.board.map((l) => `<div>&gt; ${esc(l)}</div>`).join('')}</div>
       <div class="actions">
         <button class="btn" data-x="rulePrev" ${i ? '' : 'disabled'}>Poprzednia <kbd>←</kbd></button>
         ${
@@ -461,9 +653,9 @@ function mainRules() {
 function mainIntro() {
   const r = E.roundOf(state);
   return `
-    <div class="sec-h"><h2>${esc(r.name || 'Runda ' + (state.round + 1))}</h2><span class="label">intro na streamie</span></div>
+    <div class="sec-h"><h2>${esc(r.name || 'Runda ' + (state.round + 1))}</h2><span class="label">intro na planszy</span></div>
     <div class="qcard">
-      <div class="hint">Na streamie lecą kategorie tej rundy. Zapowiedz je i przejdź do planszy. Zaczyna <b>${esc(E.nameOf(state, state.picker))}</b>${state.round > 0 ? ' (najniższy wynik)' : ' (losowo)'}.</div>
+      <div class="hint">Na planszy lecą kategorie tej rundy. Zapowiedz je i przejdź do planszy. Zaczyna <b>${esc(E.nameOf(state, state.picker))}</b>${state.round > 0 ? ' (najniższy wynik)' : ' (losowo)'}.</div>
       <div class="actions"><button class="btn primary" data-x="next">Pokaż planszę <kbd>Enter</kbd></button></div>
     </div>`;
 }
@@ -522,20 +714,51 @@ const fmt = (t) => {
 };
 const AUDIO_TXT = {
   ready: 'gotowe, czeka',
-  playing: 'gra na streamie',
+  loading: 'pobiera plik',
+  playing: 'gra',
   paused: 'pauza',
   ended: 'fragment się skończył',
   missing: 'brak pliku audio, wczytaj folder',
   error: 'błąd odtwarzania',
-  locked: 'kliknij raz w okno streamu (dźwięk)',
+  locked: 'dźwięk zablokowany',
 };
+
+// stan audio: u prowadzącego (podgląd z dźwiękiem albo osobne okno) i u graczy
+function localAudio(src) {
+  return audioStat && audioStat.src === src && Date.now() - audioStat.at < 60000 ? audioStat : null;
+}
+
+function playersAudio(src) {
+  const out = [];
+  src = media.isExternal(src) ? src : secretFor(src).id; // gracze znają plik tylko po losowym id
+  for (const p of state.players) {
+    if (p.manual || !p.connected) continue;
+    const d = devices.get(p.id);
+    out.push({ name: p.name, st: d?.audio?.src === src ? d.audio.st : null });
+  }
+  return out;
+}
+
+function audioPlaying(src) {
+  const l = localAudio(src);
+  if (l) return l.st === 'playing';
+  return playersAudio(src).some((x) => x.st === 'playing');
+}
 
 function audioBlock(q) {
   const live = state.phase !== 'dd';
-  const st = audioStat && audioStat.src === q.audio && Date.now() - audioStat.at < 60000 ? audioStat : null;
-  const txt = !live ? 'muzyka ruszy po ustaleniu stawki' : st ? AUDIO_TXT[st.st] || st.st : 'brak odpowiedzi z okna streamu, czy jest otwarte?';
+  const st = localAudio(q.audio);
+  const txt = !live ? 'muzyka ruszy po ustaleniu stawki' : st ? `u Ciebie: ${AUDIO_TXT[st.st] || st.st}` : prefs.sound ? 'u Ciebie: czeka' : 'u Ciebie: wyciszone (podgląd bez dźwięku)';
   const range = q.audioStart || q.audioEnd ? ` · fragment ${fmt(q.audioStart || 0)}–${q.audioEnd ? fmt(q.audioEnd) : 'koniec'}` : '';
-  const playing = st?.st === 'playing';
+  const playing = audioPlaying(q.audio);
+  const ps = playersAudio(q.audio);
+  const bad = ps.filter((x) => ['missing', 'error', 'locked', 'loading'].includes(x.st));
+  const on = ps.filter((x) => x.st === 'playing').length;
+  const who = ps.length
+    ? `<div class="hint">U graczy: ${on ? `gra u ${on} z ${ps.length}` : `${ps.filter((x) => x.st && x.st !== 'loading' && x.st !== 'missing').length} z ${ps.length} gotowych`}${
+        bad.length ? `. <b style="color:var(--tally)">${bad.map((x) => `${esc(x.name)}: ${esc(AUDIO_TXT[x.st] || x.st)}`).join(', ')}</b>` : ''
+      }</div>`
+    : '';
   return `<div class="audio${playing ? ' on' : ''}">
     <div class="aline"><span class="label">Audio${range}</span><span class="ast${st && ['missing', 'error', 'locked'].includes(st.st) ? ' bad' : ''}">${esc(txt)}</span><span class="atime" id="atime"></span></div>
     ${
@@ -547,6 +770,7 @@ function audioBlock(q) {
     </div>`
         : ''
     }
+    ${live ? who : ''}
   </div>`;
 }
 
@@ -558,7 +782,7 @@ function mainDD() {
     <div class="qcard">
       <div class="hint"><b>${esc(E.nameOf(state, state.picker))}</b> wpisuje stawkę na telefonie albo podaje ją na głos, wtedy wpisz ją tutaj. Zakres <b>${E.DD_MIN}–${max}</b>.</div>
       <div class="row" style="max-width:420px"><input class="field" id="ddw" inputmode="numeric" placeholder="Stawka ${E.DD_MIN}–${max}"><button class="btn primary" data-x="ddWager">Stawka</button><button class="btn ghost small" data-x="ddMax">Max (${max})</button></div>
-      <div class="hint">Pytanie pokaże się na streamie dopiero po ustaleniu stawki. Podgląd dla Ciebie:</div>
+      <div class="hint">Pytanie pokaże się graczom dopiero po ustaleniu stawki. Podgląd dla Ciebie:</div>
       ${qBlock(q)}
     </div>`;
 }
@@ -599,7 +823,7 @@ function mainReveal() {
   if (r?.verdict === 'half') res = `${esc(E.nameOf(state, r.id))} dostaje połowę, +${r.delta}.`;
   if (r?.verdict === 'wrong') res = `${esc(E.nameOf(state, r.id))} pudłuje, ${r.delta}.`;
   return `
-    <div class="sec-h"><h2>${esc(cat.name)}</h2><span class="label">odpowiedź na streamie</span></div>
+    <div class="sec-h"><h2>${esc(cat.name)}</h2><span class="label">odpowiedź na planszy</span></div>
     <div class="qcard">
       <div class="hint" style="font-size:16px"><b>${res}</b> Czas na złośliwy komentarz.</div>
       ${qBlock(q)}
@@ -616,7 +840,7 @@ function mainFinal() {
   if (s.phase === 'final-intro') {
     const out = s.players.filter((p) => !F.ids.includes(p.id));
     return `
-      <div class="sec-h"><h2>Finał</h2><span class="label">kategoria na streamie</span></div>
+      <div class="sec-h"><h2>Finał</h2><span class="label">kategoria na planszy</span></div>
       <div class="qcard">
         <div class="hint">Kategoria: <b>${esc(f.category)}</b>. Grają tylko gracze z dodatnim wynikiem: <b>${F.ids.map(nm).join(', ')}</b>.${out.length ? ` Odpadają: ${out.map((p) => esc(p.name)).join(', ')}.` : ''}</div>
         <div class="actions"><button class="btn primary" data-x="finalWagers">Zbieraj zakłady <kbd>Enter</kbd></button></div>
@@ -674,7 +898,7 @@ function mainFinal() {
         <div class="actions">
           <button class="btn ok solid" data-x="fRight" ${judged ? 'disabled' : ''}>Dobrze <kbd>D</kbd></button>
           <button class="btn danger solid" data-x="fWrong" ${judged ? 'disabled' : ''}>Źle <kbd>Z</kbd></button>
-          <button class="btn" data-x="fShow" ${F.shown ? 'disabled' : ''}>Pokaż poprawną na streamie <kbd>S</kbd></button>
+          <button class="btn" data-x="fShow" ${F.shown ? 'disabled' : ''}>Pokaż poprawną graczom <kbd>S</kbd></button>
           <button class="btn primary" data-x="fNext" ${judged ? '' : 'disabled'}>${F.idx < F.order.length - 1 ? 'Następny gracz' : 'Wyniki końcowe'} <kbd>Enter</kbd></button>
         </div>
         ${shameBox()}
@@ -770,7 +994,7 @@ function seasonPanel() {
     : '';
   return `<div class="panel">
     <div class="row" style="justify-content:space-between"><span class="label">Ranking sezonu · ${eps.length} ${plural(eps.length, 'odcinek', 'odcinki', 'odcinków')} · top ${S.FINALE_SPOTS} gra w finale sezonu</span>
-      <button class="btn small ${onAir ? 'primary' : ''}" data-x="${onAir ? 'screenOff' : 'screenSeason'}">${onAir ? 'Zdejmij ze streamu' : 'Pokaż na streamie'}</button></div>
+      <button class="btn small ${onAir ? 'primary' : ''}" data-x="${onAir ? 'screenOff' : 'screenSeason'}">${onAir ? 'Zdejmij z planszy' : 'Pokaż na planszy'}</button></div>
     ${saveRow}
     ${seasonTable()}
     ${epList}
@@ -818,7 +1042,7 @@ function mainEnd() {
     state.players.map((p) => `<button class="chip${cur === p.id ? ` on${field === 'w' ? ' amber' : ''}` : ''}" data-pun-${field}="${esc(p.id)}">${esc(p.name)}</button>`).join('');
   const SCRN = { shame: 'Hall of Shame', punish: 'kara', season: 'ranking sezonu' };
   return `
-    <div class="sec-h"><h2>Koniec odcinka</h2><span class="label">na streamie: ${esc(SCRN[scr] || 'wyniki odcinka')}</span></div>
+    <div class="sec-h"><h2>Koniec odcinka</h2><span class="label">na planszy: ${esc(SCRN[scr] || 'wyniki odcinka')}</span></div>
     <div class="qcard">
       <div class="actions end-tabs">${tabs}</div>
       <div class="hint">Proponowana kolejność: wyniki, Hall of Shame, kara, ranking sezonu. Przełączasz, co widzą widzowie; nic się tu nie liczy od nowa.</div>
@@ -889,7 +1113,7 @@ function render() {
 
 function isPlaying() {
   const q = E.currentQuestion(state);
-  return !!(q?.audio && audioStat?.src === q.audio && audioStat.st === 'playing');
+  return !!(q?.audio && audioPlaying(q.audio));
 }
 
 const x = {
@@ -1197,8 +1421,8 @@ async function storeMedia(med, dir) {
     return;
   }
   mediaCount = items.length;
-  mediaVer++;
-  store.set(LS.mediaVer, String(mediaVer));
+  mediaVer = newMediaVer();
+  store.set(LS.mediaVer, mediaVer);
   thumbs.clear();
   media.resetCache();
 }

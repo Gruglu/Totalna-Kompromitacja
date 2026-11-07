@@ -4,24 +4,32 @@ Nerdowski teleturniej w stylu Jeopardy na Discorda. Statyczna strona (GitHub Pag
 
 ## Jak grać
 
-1. Prowadzący otwiera `host.html` (panel, tego nie streamuje).
-2. W panelu klika **Ekran streamu**, w nowym oknie klika raz (dźwięk), `F` = pełny ekran. To okno udostępnia na Discordzie.
-   Po kliknięciu Chrome/Edge zapyta o udostępnienie tej karty: **zezwól** (pasek „Udostępniasz tę kartę” można schować przyciskiem „Ukryj”). Bez tego przeglądarka przestaje rysować planszę, gdy jej okno jest zakryte panelem, i Discord pokazuje zamrożony obraz. Obraz z tego udostępnienia nigdzie nie wychodzi. Jeśli ktoś je zatrzyma, plansza pokaże komunikat, a kliknięcie w nią włącza je znowu. Zminimalizowane okno i tak stoi, więc planszy nie minimalizuj.
-3. Gracze wchodzą z telefonu w link albo skanują QR ze streamu (`play.html?r=KOD`) i wpisują nick.
-4. **Wczytaj folder**: folder z pytaniami (plik JSON + podfolder `media/`). Jeśli w folderze jest kilka JSON-ów, panel zapyta, który gramy. **Wczytaj pliki** przyjmuje sam JSON albo JSON razem z plikami mediów. Pytania i media zostają tylko w przeglądarce prowadzącego (localStorage + IndexedDB), nie trafiają do repo.
-5. Start odcinka: **Czołówka** (animacja z muzyką na streamie, ok. 11 s), potem **Zasady** (prowadzący czyta tekst z panelu, stream pokazuje skrót), potem pierwsza runda.
+Bez streamowania: każdy gracz widzi planszę u siebie, a obrazki i muzyka z pytań grają na jego urządzeniu.
+
+1. Prowadzący otwiera `host.html` (panel). Po prawej jest podgląd **Co widzą gracze**: rozmiar (mały, średni, duży), dźwięk u prowadzącego (włącz, żeby słyszeć muzykę z pytań razem z graczami) i widok telefonu, żeby sprawdzić, jak wygląda plansza w pionie.
+2. Gracze wchodzą w link (`play.html?r=KOD`) i wpisują nick:
+   - **komputer**: plansza 16:9 i panel z buzzerem z boku, spacja = buzzer, `F` = pełny ekran,
+   - **telefon**: plansza na górze, buzzer pod nią; obrazek z pytania dotyka się, żeby go powiększyć,
+   - **komputer + telefon**: na komputerze „Telefon jako buzzer” pokazuje kod QR, telefon po zeskanowaniu jest buzzerem tego samego gracza (sam przycisk, plansza zostaje na komputerze),
+   - **Tylko oglądam**: sama plansza, bez grania (np. telewizor albo widz).
+   Przy pierwszym dotknięciu urządzenie włącza dźwięk.
+3. **Wczytaj folder**: folder z pytaniami (plik JSON + podfolder `media/`). Jeśli w folderze jest kilka JSON-ów, panel zapyta, który gramy. **Wczytaj pliki** przyjmuje sam JSON albo JSON razem z plikami mediów. Pytania i media leżą tylko w przeglądarce prowadzącego (localStorage + IndexedDB), nie trafiają do repo.
+4. Urządzenia graczy pobierają media od prowadzącego zaraz po wejściu (P2P, przez to samo połączenie co buzzery). Pliki idą pod losowymi nazwami i zaszyfrowane, a klucz do danego obrazka czy klipu przychodzi dopiero razem z pytaniem, więc nikt nie podejrzy ich wcześniej w narzędziach przeglądarki. Panel pokazuje przy każdym graczu „media 12/14” i przy pytaniu z muzyką, u ilu graczy gra.
+5. Start odcinka: **Czołówka** (animacja z muzyką u graczy, ok. 11 s), potem **Zasady** (prowadzący czyta tekst z panelu, plansza pokazuje skrót), potem pierwsza runda.
+
+**Osobne okno planszy** (przycisk u góry) dalej istnieje, np. na drugi monitor albo gdyby ktoś jednak chciał streamować. Wtedy wyłącz dźwięk w podglądzie, żeby muzyka nie grała podwójnie.
 
 ## Po odcinku: Hall of Shame, kara, ranking sezonu
 
 - **Hall of Shame**: w trakcie pytania, odpowiedzi albo odsłaniania finału klawisz `H` (albo kliknięcie w pole „Hall of Shame”) otwiera wpis. Gracz jest podpowiedziany (ten, kto właśnie odpowiadał), wpisujesz, co powiedział, `Enter` zapisuje. Po odcinku wybierasz, która odpowiedź idzie na slajd, reszta pokazuje się jako nominacje.
 - **Kara**: zwycięzca wybiera ostatniemu miejscu nick i avatar na Discordzie na 7 dni. Panel podpowiada pierwsze i ostatnie miejsce (przy remisie klikasz ręcznie), a nowy nick wpisujesz, gdy zwycięzca go wymyśli. Domyślne zasady mają o tym osobny slajd.
-- **Ranking sezonu**: „Zapisz odcinek do sezonu” na ekranie końcowym dopisuje wyniki (ten sam numer odcinka nadpisuje stary zapis). Suma punktów ze wszystkich odcinków, top 3 gra w finale sezonu. Sezon leży w przeglądarce prowadzącego (nie znika przy „Nowa gra”), a **Eksport JSON** / **Import JSON** przenosi go na inny komputer. Gracze łączą się po nicku. Ranking można pokazać na streamie także z poczekalni.
+- **Ranking sezonu**: „Zapisz odcinek do sezonu” na ekranie końcowym dopisuje wyniki (ten sam numer odcinka nadpisuje stary zapis). Suma punktów ze wszystkich odcinków, top 3 gra w finale sezonu. Sezon leży w przeglądarce prowadzącego (nie znika przy „Nowa gra”), a **Eksport JSON** / **Import JSON** przenosi go na inny komputer. Gracze łączą się po nicku. Ranking można pokazać graczom także z poczekalni.
 
-Na ekranie końcowym przełączasz, co widzi stream: wyniki odcinka, Hall of Shame, kara, ranking sezonu.
+Na ekranie końcowym przełączasz, co widzą gracze: wyniki odcinka, Hall of Shame, kara, ranking sezonu.
 
 ## Mówiące awatary z Discorda (opcjonalnie)
 
-Awatar każdego gracza przy nicku na streamie, podświetlany i z otwartymi ustami, kiedy gracz mówi na kanale głosowym. Działa przez małego bota Discorda uruchamianego u prowadzącego na czas streamu (folder `bot/`, instrukcja w [bot/README.md](bot/README.md)). Bez bota plansza wygląda jak zwykle.
+Awatar każdego gracza przy nicku na planszy, podświetlany i z otwartymi ustami, kiedy gracz mówi na kanale głosowym. Działa przez małego bota Discorda uruchamianego u prowadzącego na czas gry (folder `bot/`, instrukcja w [bot/README.md](bot/README.md)). Panel łączy się z botem i przekazuje awatary i to, kto mówi, na urządzenia graczy. Bez bota plansza wygląda jak zwykle.
 
 ## Skróty w panelu
 
@@ -34,11 +42,11 @@ Pytanie: `q` (treść), `a` (odpowiedź), opcjonalnie `alt` (inne akceptowane od
 
 - `image`: obrazek pokazywany razem z pytaniem,
 - `answerImage`: obrazek pokazywany dopiero z odpowiedzią,
-- `audio`: klip, który prowadzący puszcza z panelu (gra okno streamu), `audioStart` i `audioEnd` w sekundach wycinają fragment.
+- `audio`: klip, który prowadzący puszcza z panelu (gra na urządzeniach graczy), `audioStart` i `audioEnd` w sekundach wycinają fragment.
 
 Ścieżki mediów są względne do pliku JSON (`media/kadr.jpg`) albo to pełne adresy `https://`. Obrazki jpg/png/webp/svg, audio mp3/ogg/m4a. Nazwy plików najlepiej unikalne, bo przy wczytywaniu pojedynczych plików dopasowanie idzie po nazwie. Panel w poczekalni pokazuje, których plików brakuje.
 
-Odcinek: `episode` (numer w czołówce; bez tego pola brany z nazwy pliku `odcinek-2.json`) i `subtitle` (podpis pod logo). Własne zasady: `rules` jako lista `{ "title", "board": [krótkie linijki na stream], "host": "tekst do przeczytania" }`; bez tego pola panel układa zasady sam na podstawie zestawu (rundy, stawki, pola „wszystko albo nic”, finał, czy są media).
+Odcinek: `episode` (numer w czołówce; bez tego pola brany z nazwy pliku `odcinek-2.json`) i `subtitle` (podpis pod logo). Własne zasady: `rules` jako lista `{ "title", "board": [krótkie linijki na planszę], "host": "tekst do przeczytania" }`; bez tego pola panel układa zasady sam na podstawie zestawu (rundy, stawki, pola „wszystko albo nic”, finał, czy są media).
 Finał: `category`, `q`, `a`. Liczba pól „wszystko albo nic” na rundę: `dailyDoubles` (domyślnie 1 i 2).
 
 Prawdziwych pytań nie wrzucamy do repo (`pytania/*.json` poza przykładem jest w `.gitignore`).

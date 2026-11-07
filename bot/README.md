@@ -1,8 +1,8 @@
 # Mówiące awatary (bot Discorda)
 
-Każdy gracz ma na streamie swój awatar przy nicku. Kiedy mówi na kanale głosowym, awatar podświetla się na bursztynowo i podmienia na drugi obrazek (np. otwarte usta).
+Każdy gracz ma na planszy swój awatar przy nicku. Kiedy mówi na kanale głosowym, awatar podświetla się na bursztynowo i podmienia na drugi obrazek (np. otwarte usta).
 
-Bot działa **tylko u prowadzącego, na czas streamu**: siedzi na kanale głosowym wyciszony, niczego nie nagrywa, dostaje od Discorda wyłącznie sygnał „ten ktoś zaczął/przestał mówić” i przekazuje go do okna streamu na tym samym komputerze (`ws://127.0.0.1:7337`). Hosting nie jest potrzebny, strona dalej jest statyczna. Bez bota plansza wygląda jak zwykle.
+Bot działa **tylko u prowadzącego, na czas gry**: siedzi na kanale głosowym wyciszony, niczego nie nagrywa, dostaje od Discorda wyłącznie sygnał „ten ktoś zaczął/przestał mówić” i przekazuje go do panelu prowadzącego na tym samym komputerze (`ws://127.0.0.1:7337`), a panel wysyła to dalej na urządzenia graczy. Hosting nie jest potrzebny, strona dalej jest statyczna. Bez bota plansza wygląda jak zwykle.
 
 ## Jednorazowo: przygotowanie
 
@@ -31,13 +31,13 @@ W folderze `bot/` (najprościej: pobierz repo jako ZIP albo `git clone`):
 2. Wrzuć obrazki do `bot/awatary/` (folder jest ignorowany przez git). Najlepiej kwadratowe, 256×256 px, PNG/JPG/WEBP/GIF (animowany GIF też zadziała). Brakujący obrazek bot zastąpi literką, żeby dało się sprawdzić układ.
 3. W terminalu w folderze `bot/` (Windows: w folderze Shift + prawy klik → „Otwórz w terminalu”): `npm install`.
 
-## Na każdym streamie
+## Na każdym odcinku
 
 1. W folderze `bot/`: `npm start`. Bot loguje się i wchodzi na kanał. W konsoli widać, kogo rozpoznał („Rozpoznany: …”) i kogo pominął.
-2. Otwórz panel i **Ekran streamu** jak zwykle. Okno streamu samo łączy się z botem (kolejność uruchamiania nie ma znaczenia, łączy się ponownie co kilka sekund).
+2. Otwórz panel jak zwykle. Panel sam łączy się z botem (kolejność uruchamiania nie ma znaczenia, łączy się ponownie co kilka sekund).
 3. Jeśli przeglądarka zapyta o dostęp do aplikacji lub urządzeń na tym komputerze, kliknij **Zezwól**.
 4. W poczekalni panelu pojawi się linijka „Mówiące awatary: bot Discorda połączony” i lista graczy, którym nie dopasował się awatar (wtedy popraw `nick` w `config.json` i zrestartuj bota).
-5. Po streamie: `Ctrl+C` w oknie bota, wychodzi z kanału.
+5. Po odcinku: `Ctrl+C` w oknie bota, wychodzi z kanału.
 
 ## Próba bez Discorda
 
@@ -47,6 +47,6 @@ W folderze `bot/` (najprościej: pobierz repo jako ZIP albo `git clone`):
 
 - **„Nie widzę kanału głosowego”**: bot wypisze listę kanałów, które widzi; skopiuj nazwę albo ID do `kanal`. Jeśli lista jest pusta, bot nie jest na serwerze (punkt 2.3).
 - **Awatar się nie rusza**: sprawdź w konsoli bota, czy osoba jest „Rozpoznana”. Jeśli „pomijam”, wpisz w `discord` nazwę użytkownika, którą wypisał bot.
-- **Port zajęty**: bot już działa w innym oknie. Inny port: `"port": 7338` w `config.json` i ekran streamu z `board.html?bot=7338`.
-- Wyłączenie awatarów na jeden stream: po prostu nie uruchamiaj bota (albo `board.html?bot=0`).
+- **Port zajęty**: bot już działa w innym oknie. Inny port: `"port": 7338` w `config.json` i panel z `host.html?bot=7338`.
+- Wyłączenie awatarów na jeden odcinek: po prostu nie uruchamiaj bota (albo `host.html?bot=0`).
 - Usta reagują z opóźnieniem ok. 0,1–0,3 s, tak podaje to Discord. Jak długo zostają otwarte po ostatnim dźwięku, ustawia `"przytrzymaj": 250` (ms) w `config.json`.
