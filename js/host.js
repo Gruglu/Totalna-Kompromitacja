@@ -759,14 +759,30 @@ function seasonPanel() {
     ${saveRow}
     ${seasonTable()}
     ${epList}
+    ${aliasBlock()}
     <div class="row">
       <input class="field" id="season-name" value="${esc(season.name)}" maxlength="40" style="max-width:220px" title="Nazwa sezonu">
       <button class="btn small ghost" data-x="seasonRename">Zmień nazwę</button>
       <button class="btn small" data-x="seasonExport" ${eps.length ? '' : 'disabled'}>Eksport JSON</button>
       <button class="btn small" data-x="seasonImport">Import JSON</button>
     </div>
-    <div class="hint">Sezon trzyma się w tej przeglądarce i nie znika przy „Nowa gra”. Po każdym odcinku zrób eksport i trzymaj plik obok pytań, na wypadek innego komputera. Gracze łączą się po nicku, więc niech nie zmieniają nicków między odcinkami.</div>
+    <div class="hint">Sezon trzyma się w tej przeglądarce i nie znika przy „Nowa gra”. Po każdym odcinku zrób eksport i trzymaj plik obok pytań, na wypadek innego komputera. Gracze łączą się po nicku. Nick z kary łączy się sam przy zapisie odcinka, inne zmiany nicków połączysz polem wyżej.</div>
   </div>`;
+}
+
+function aliasBlock() {
+  const al = Object.entries(season.aliases || {});
+  const list = al.length
+    ? `<div class="ep-list">${al
+        .map(([k, v]) => `<div><span class="label">alias</span><span>„${esc(k)}” liczy się jako <b>${esc(v)}</b></span><button class="btn small danger ghost" data-alias-del="${esc(k)}">Usuń</button></div>`)
+        .join('')}</div>`
+    : '';
+  return `${list}<div class="row">
+      <input class="field" id="alias-from" placeholder="Nick (np. z kary)" maxlength="24">
+      <span class="label">to ten sam gracz co</span>
+      <input class="field" id="alias-to" placeholder="Główny nick" maxlength="24">
+      <button class="btn small" data-x="aliasAdd">Połącz</button>
+    </div>`;
 }
 
 function mainEnd() {
@@ -920,7 +936,9 @@ const x = {
   seasonSave() {
     const ep = S.episodeFrom(state, E.punishment(state));
     if (!ep.results.length) return toast('Nie ma graczy');
-    const { replaced, ...next } = S.upsert(season, ep);
+    let { replaced, ...next } = S.upsert(season, ep);
+    // nick z kary: w następnym odcinku ta osoba może grać pod nowym nickiem, punkty mają się łączyć
+    if (ep.punish?.nick && ep.punish.loser) next = S.addAlias(next, ep.punish.nick, ep.punish.loser);
     state = { ...state, seasonSaved: true }; // bez numeru odcinka: nie dopisuj drugi raz przez przypadek
     persist();
     setSeason(next);
@@ -931,6 +949,17 @@ const x = {
     if (!v) return;
     setSeason({ ...season, name: v.slice(0, 40) });
     toast('Nazwa sezonu zmieniona');
+  },
+  aliasAdd() {
+    const a = document.getElementById('alias-from')?.value.trim();
+    const b = document.getElementById('alias-to')?.value.trim();
+    if (!a || !b) return toast('Wpisz oba nicki');
+    for (const id of ['alias-from', 'alias-to']) {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    }
+    setSeason(S.addAlias(season, a, b));
+    toast(`${a} liczy się teraz jako ${b}`);
   },
   seasonExport() {
     S.download(season);
@@ -968,6 +997,7 @@ document.addEventListener('click', (e) => {
   else if (t.dataset.shameDel) dispatch({ type: 'shameDel', n: Number(t.dataset.shameDel) }, false);
   else if (t.dataset.punW) dispatch({ type: 'punish', winner: t.dataset.punW }, false);
   else if (t.dataset.punL) dispatch({ type: 'punish', loser: t.dataset.punL }, false);
+  else if (t.dataset.aliasDel) setSeason(S.removeAlias(season, t.dataset.aliasDel));
   else if (t.dataset.seasonDel) {
     const i = Number(t.dataset.seasonDel);
     if (armedDel !== i) {
@@ -1034,6 +1064,7 @@ document.addEventListener('keydown', (e) => {
       else if (el.id === 'shame-text') x.shameSave();
       else if (el.id === 'pun-nick') x.punNick();
       else if (el.id === 'season-name') x.seasonRename();
+      else if (el.id === 'alias-from' || el.id === 'alias-to') x.aliasAdd();
       else if (el.id.startsWith('fw-')) document.querySelector(`[data-fw="${CSS.escape(el.id.slice(3))}"]`)?.click();
       else if (el.id.startsWith('fa-')) document.querySelector(`[data-fa="${CSS.escape(el.id.slice(3))}"]`)?.click();
     }

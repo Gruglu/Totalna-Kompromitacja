@@ -6,7 +6,7 @@ export const FINALE_SPOTS = 3;
 const KEY = 'pk.season';
 
 export function emptySeason() {
-  return { v: 1, name: 'Sezon 1', episodes: [] };
+  return { v: 1, name: 'Sezon 1', episodes: [], aliases: {} };
 }
 
 export function load() {
@@ -44,7 +44,10 @@ export function normalize(d) {
       punish: e.punish && typeof e.punish === 'object' ? e.punish : null,
     }))
     .filter((e) => e.results.length);
-  return { v: 1, name: String(d.name || 'Sezon 1').slice(0, 40), episodes };
+  const aliases = {};
+  if (d.aliases && typeof d.aliases === 'object')
+    for (const [k, v] of Object.entries(d.aliases)) if (nkey(k) && String(v ?? '').trim()) aliases[nkey(k)] = String(v).trim().slice(0, 24);
+  return { v: 1, name: String(d.name || 'Sezon 1').slice(0, 40), episodes, aliases };
 }
 
 // wpis odcinka z bieżącego stanu gry
@@ -58,6 +61,29 @@ export function episodeFrom(state, punish) {
     shame: (state.shame || []).map(({ name, text, q, a, cat, star }) => ({ name, text, q, a, cat, star: !!star })),
     punish: punish ? { winner: punish.winnerName, loser: punish.loserName, nick: punish.nick || '', until: punish.until } : null,
   };
+}
+
+// alias: nick z kary (albo inny) liczy się jako ten sam gracz co „main”
+export function addAlias(season, nick, main) {
+  const k = nkey(nick);
+  const m = String(main ?? '').trim();
+  if (!k || !m || k === nkey(m)) return season;
+  const aliases = { ...(season.aliases || {}) };
+  // nie twórz łańcuchów: wszystko, co wskazywało na nick, teraz wskazuje na main
+  for (const [a, v] of Object.entries(aliases)) if (nkey(v) === k) aliases[a] = canonical({ aliases }, m);
+  aliases[k] = canonical({ aliases }, m);
+  delete aliases[nkey(aliases[k])];
+  return { ...season, aliases };
+}
+
+export function removeAlias(season, nick) {
+  const aliases = { ...(season.aliases || {}) };
+  delete aliases[nkey(nick)];
+  return { ...season, aliases };
+}
+
+function canonical(season, name) {
+  return season.aliases?.[nkey(name)] || name;
 }
 
 // odcinek o tym samym numerze zastępuje poprzedni zapis
@@ -84,9 +110,10 @@ export function table(season) {
     const sorted = [...e.results].sort((a, b) => a.score - b.score);
     const bottom = sorted.length > 1 ? sorted[0].score : null;
     e.results.forEach((r) => {
-      const k = nkey(r.name);
-      const row = m.get(k) || { name: r.name, total: 0, played: 0, wins: 0, lasts: 0, last: null };
-      row.name = r.name; // najnowsza pisownia nicku
+      const main = canonical(season, r.name);
+      const k = nkey(main);
+      const row = m.get(k) || { name: main, total: 0, played: 0, wins: 0, lasts: 0, last: null };
+      if (main === r.name) row.name = r.name; // najnowsza pisownia nicku
       row.total += r.score;
       row.played++;
       if (r.score === top) row.wins++;
