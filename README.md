@@ -10,9 +10,17 @@ Nerdowski teleturniej w stylu Jeopardy na Discorda. Statyczna strona (GitHub Pag
 4. **Wczytaj folder**: folder z pytaniami (plik JSON + podfolder `media/`). Jeśli w folderze jest kilka JSON-ów, panel zapyta, który gramy. **Wczytaj pliki** przyjmuje sam JSON albo JSON razem z plikami mediów. Pytania i media zostają tylko w przeglądarce prowadzącego (localStorage + IndexedDB), nie trafiają do repo.
 5. Start odcinka: **Czołówka** (animacja z muzyką na streamie, ok. 11 s), potem **Zasady** (prowadzący czyta tekst z panelu, stream pokazuje skrót), potem pierwsza runda.
 
+## Po odcinku: Hall of Shame, kara, ranking sezonu
+
+- **Hall of Shame**: w trakcie pytania, odpowiedzi albo odsłaniania finału klawisz `H` (albo kliknięcie w pole „Hall of Shame”) otwiera wpis. Gracz jest podpowiedziany (ten, kto właśnie odpowiadał), wpisujesz, co powiedział, `Enter` zapisuje. Po odcinku wybierasz, która odpowiedź idzie na slajd, reszta pokazuje się jako nominacje.
+- **Kara**: zwycięzca wybiera ostatniemu miejscu nick i avatar na Discordzie na 7 dni. Panel podpowiada pierwsze i ostatnie miejsce (przy remisie klikasz ręcznie), a nowy nick wpisujesz, gdy zwycięzca go wymyśli. Domyślne zasady mają o tym osobny slajd.
+- **Ranking sezonu**: „Zapisz odcinek do sezonu” na ekranie końcowym dopisuje wyniki (ten sam numer odcinka nadpisuje stary zapis). Suma punktów ze wszystkich odcinków, top 3 gra w finale sezonu. Sezon leży w przeglądarce prowadzącego (nie znika przy „Nowa gra”), a **Eksport JSON** / **Import JSON** przenosi go na inny komputer. Gracze łączą się po nicku. Ranking można pokazać na streamie także z poczekalni.
+
+Na ekranie końcowym przełączasz, co widzi stream: wyniki odcinka, Hall of Shame, kara, ranking sezonu.
+
 ## Skróty w panelu
 
-`Spacja` otwórz buzzery · `D` dobrze · `Z` źle · `P` połowa · `N` nikt nie wie · `Enter` dalej · `1–6` zgłoszenie ręczne (gdy komuś nie działa telefon) · `Ctrl+Z` cofnij · `M` muzyka graj/pauza · `R` muzyka od początku · `←`/`→` poprzednia/następna zasada.
+`Spacja` otwórz buzzery · `D` dobrze · `Z` źle · `P` połowa · `N` nikt nie wie · `Enter` dalej · `1–6` zgłoszenie ręczne (gdy komuś nie działa telefon) · `Ctrl+Z` cofnij · `M` muzyka graj/pauza · `R` muzyka od początku · `H` Hall of Shame · `←`/`→` poprzednia/następna zasada.
 
 ## Plik z pytaniami
 

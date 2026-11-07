@@ -26,6 +26,9 @@ export function newGame(set, players = []) {
     final: null,
     fx: { n: 0, type: null },
     media: { n: 0, cmd: null },
+    screen: null, // ekran dodatkowy w poczekalni i po odcinku: 'season' | 'shame' | 'punish'
+    shame: [], // Hall of Shame: najgłupsze odpowiedzi odcinka
+    punish: { winner: null, loser: null, nick: '' },
   };
 }
 
@@ -169,12 +172,14 @@ export function reduce(state, a) {
     case 'opener':
       if (!['lobby', 'opener', 'rules'].includes(s.phase)) return state;
       s.phase = 'opener';
+      s.screen = null;
       s.openerAt = now();
       fx(s, 'opener');
       return s;
     case 'rules': {
       if (!['lobby', 'opener', 'rules'].includes(s.phase)) return state;
       s.phase = 'rules';
+      s.screen = null;
       s.rule = Math.max(0, Math.min(a.idx ?? 0, rulesFor(s.set).length - 1));
       s.ruleAt = now();
       fx(s, 'rule');
@@ -198,6 +203,7 @@ export function reduce(state, a) {
     case 'start':
       if (!s.players.length || !['lobby', 'opener', 'rules'].includes(s.phase)) return state;
       s.round = 0;
+      s.screen = null;
       s.used = {};
       s.dd = {};
       s.set.rounds.forEach((_, r) => placeDailyDoubles(s, r));
@@ -429,6 +435,48 @@ export function reduce(state, a) {
       s.phase = 'end';
       fx(s, 'end');
       return s;
+
+    // ---------- po odcinku: Hall of Shame, kara, ranking sezonu ----------
+    case 'screen':
+      if (!['lobby', 'end'].includes(s.phase)) return state;
+      if (a.screen && !['season', 'shame', 'punish'].includes(a.screen)) return state;
+      s.screen = a.screen || null;
+      fx(s, s.screen ? 'rule' : null);
+      return s;
+    case 'shameAdd': {
+      const text = String(a.text ?? '').trim().slice(0, 200);
+      if (!text) return state;
+      s.shame = s.shame || [];
+      s.shame.push({
+        n: (s.shame.reduce((m, x) => Math.max(m, x.n || 0), 0) || 0) + 1,
+        id: a.id ?? null,
+        name: a.id ? nameOf(s, a.id) : String(a.name || '').slice(0, 24) || '?',
+        text,
+        q: a.q ? String(a.q).slice(0, 400) : null,
+        a: a.a ? String(a.a).slice(0, 200) : null,
+        cat: a.cat ? String(a.cat).slice(0, 80) : null,
+        star: !s.shame.some((x) => x.star),
+      });
+      return s;
+    }
+    case 'shameDel': {
+      const list = s.shame || [];
+      const gone = list.find((x) => x.n === a.n);
+      s.shame = list.filter((x) => x.n !== a.n);
+      if (gone?.star && s.shame.length) s.shame[0].star = true;
+      return s;
+    }
+    case 'shameStar':
+      (s.shame || []).forEach((x) => (x.star = x.n === a.n));
+      return s;
+    case 'punish': {
+      const p = { ...(s.punish || { winner: null, loser: null, nick: '' }) };
+      if ('winner' in a) p.winner = a.winner;
+      if ('loser' in a) p.loser = a.loser;
+      if ('nick' in a) p.nick = String(a.nick ?? '').trim().slice(0, 32);
+      s.punish = p;
+      return s;
+    }
     default:
       return state;
   }
@@ -452,6 +500,27 @@ export function standings(s) {
   return [...s.players].sort((a, b) => b.score - a.score);
 }
 
+// kara dla przegranego: zwycięzca nadaje przegranemu nick i avatar na Discordzie na tydzień
+export const PUNISH_DAYS = 7;
+export function punishment(s, today = new Date()) {
+  const st = standings(s);
+  const p = s.punish || {};
+  const has = (id) => id && s.players.some((x) => x.id === id);
+  const winner = has(p.winner) ? p.winner : st[0]?.id ?? null;
+  let loser = has(p.loser) ? p.loser : st[st.length - 1]?.id ?? null;
+  if (loser === winner && !has(p.loser)) loser = null;
+  const until = new Date(today.getTime() + PUNISH_DAYS * 864e5);
+  return {
+    winner,
+    loser,
+    winnerName: winner ? nameOf(s, winner) : null,
+    loserName: loser ? nameOf(s, loser) : null,
+    nick: p.nick || '',
+    until: `${until.toLocaleDateString('pl-PL', { day: 'numeric', month: 'long' })} (${until.toLocaleDateString('pl-PL', { weekday: 'long' })})`,
+    days: PUNISH_DAYS,
+  };
+}
+
 export function boardView(s) {
   const r = roundOf(s);
   const v = {
@@ -470,7 +539,13 @@ export function boardView(s) {
     qTotal: r ? r.categories.reduce((n, c) => n + c.questions.length, 0) : 0,
     qDone: Object.keys(s.used).filter((k) => k.startsWith(s.round + ':')).length,
     media: s.media || { n: 0, cmd: null },
+    screen: ['lobby', 'end'].includes(s.phase) ? s.screen || null : null,
+    episode: s.set.episode ?? null,
   };
+  if (s.phase === 'end') {
+    v.shame = (s.shame || []).map(({ n, name, text, q, a, cat, star }) => ({ n, name, text, q, a, cat, star }));
+    v.punish = punishment(s);
+  }
   if (s.phase === 'opener') {
     v.opener = { at: s.openerAt, episode: s.set.episode ?? null, subtitle: s.set.subtitle || null };
   }

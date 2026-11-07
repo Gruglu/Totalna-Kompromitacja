@@ -73,7 +73,9 @@ function bar() {
   let round = '';
   const ph = v.phase;
   if (ph === 'opener') return '';
-  if (ph === 'lobby') round = 'Zaraz zaczynamy <span>dołącz z telefonu</span>';
+  const SCR = { season: 'Ranking sezonu <span>suma punktów ze wszystkich odcinków</span>', shame: 'Hall of Shame <span>to zostanie w archiwum</span>', punish: 'Kara <span>ważna 7 dni</span>' };
+  if (v.screen && SCR[v.screen]) round = SCR[v.screen];
+  else if (ph === 'lobby') round = 'Zaraz zaczynamy <span>dołącz z telefonu</span>';
   else if (ph === 'rules') round = `Zasady gry <span>${v.rules.idx + 1} / ${v.rules.count}</span>`;
   else if (ph === 'board' || ph === 'round-intro')
     round = `${esc(v.roundName)} <span>stawki ${v.values[0]}–${v.values[v.values.length - 1]} · ${v.qDone}/${v.qTotal}</span>`;
@@ -256,10 +258,79 @@ function msize(text) {
   return '3.8cqw';
 }
 
+// ---------- po odcinku: ranking sezonu, Hall of Shame, kara ----------
+
+function seasonHTML() {
+  const se = view.season;
+  if (!se || !se.rows.length) {
+    return `<div class="center"><div class="sub">${esc(se?.name || 'Sezon')}</div><div class="huge" style="font-size:8cqw">Ranking sezonu</div><div class="crtline">Na razie pusto. Ktoś musi się pierwszy skompromitować.</div></div>`;
+  }
+  const rows = se.rows.slice(0, 8);
+  const n = rows.length;
+  const html = rows
+    .map((r, i) => {
+      const fin = i < se.spots;
+      const cut = i === se.spots - 1 && n > se.spots ? '<div class="cutline" style="--i:' + (n - i) + '"><span>granica finału sezonu</span></div>' : '';
+      const meta = `${r.played} ${r.played === 1 ? 'odcinek' : r.played < 5 ? 'odcinki' : 'odcinków'}${r.wins ? ` · wygrane ${r.wins}` : ''}${r.lasts ? ` · ostatnie miejsce ${r.lasts}` : ''}`;
+      return `<div class="srow${fin ? ' fin' : ''}${i === 0 ? ' first' : ''}" style="--i:${n - 1 - i}"><span class="pos">${r.pos}.</span><span class="nm">${esc(r.name)}<small>${esc(meta)}</small></span>${fin ? '<span class="ftag">finał</span>' : '<span></span>'}<span class="sc${r.total < 0 ? ' neg' : ''}">${r.total}</span></div>${cut}`;
+    })
+    .join('');
+  return `<div class="season">
+    <div class="shead"><div class="sub">${esc(se.name)} · po ${se.count} ${se.count === 1 ? 'odcinku' : 'odcinkach'}</div><div class="stitle">Ranking sezonu</div><div class="sub">top <b>${se.spots}</b> gra w finale sezonu</div></div>
+    <div class="srows">${html}</div>
+  </div>`;
+}
+
+function shameHTML() {
+  const list = view.shame || [];
+  const star = list.find((x) => x.star) || list[0];
+  if (!star) {
+    return `<div class="center"><div class="sub">Hall of Shame</div><div class="huge" style="font-size:8cqw">Czysto</div><div class="crtline">Dzisiaj nikt nie powiedział nic wystarczająco głupiego. Podejrzane.</div></div>`;
+  }
+  const rest = list.filter((x) => x !== star);
+  const len = star.text.length;
+  const size = len > 120 ? '3.6cqw' : len > 70 ? '4.6cqw' : len > 35 ? '6cqw' : '7.6cqw';
+  const noms = rest.length
+    ? `<div class="noms"><span class="lab">nominacje</span>${rest
+        .slice(0, 4)
+        .map((x) => `<div><b>${esc(x.name)}</b> „${esc(x.text)}”</div>`)
+        .join('')}</div>`
+    : '';
+  return `<div class="shame">
+    <div class="sh-top"><span class="sh-band">Hall of Shame</span><span class="sub">najgłupsza odpowiedź ${view.episode != null ? `odcinka ${esc(String(view.episode).padStart(2, '0'))}` : 'wieczoru'}</span></div>
+    ${star.q ? `<div class="sh-q"><span>${esc(star.cat || 'pytanie')}</span>${esc(star.q)}</div>` : ''}
+    <div class="sh-who">${esc(star.name)} odpowiada:</div>
+    <div class="sh-quote" style="--s:${size}">„${esc(star.text)}”</div>
+    ${star.a ? `<div class="answer sh-ans"><div class="k">A miało być</div><div class="a">${esc(star.a)}</div></div>` : ''}
+    <div class="sh-stamp">zapisane w archiwum</div>
+    ${noms}
+  </div>`;
+}
+
+function punishHTML() {
+  const p = view.punish;
+  if (!p?.loserName || !p?.winnerName) {
+    return `<div class="center"><div class="huge" style="font-size:8cqw">Kara</div><div class="crtline">Za mało graczy, żeby kogoś ukarać.</div></div>`;
+  }
+  return `<div class="center punish">
+    <div class="dd-band">Kara</div>
+    <div class="pl-lines">
+      <div style="--i:0"><b class="red">${esc(p.loserName)}</b> przegrywa odcinek</div>
+      <div style="--i:1"><b>${esc(p.winnerName)}</b> wybiera nowy nick i avatar na Discordzie</div>
+      <div style="--i:2">obowiązuje ${p.days} dni, do <b>${esc(p.until)}</b></div>
+      <div style="--i:3">bez zmieniania z powrotem, bez negocjacji</div>
+    </div>
+    ${p.nick ? `<div class="newnick enter-pop"><span>nowy nick</span><b>${esc(p.nick)}</b></div>` : '<div class="sub">nowy nick: <b>zwycięzca myśli…</b></div>'}
+  </div>`;
+}
+
 function main() {
   const v = view;
   const ph = v.phase;
   if (ph === 'opener') return openerHTML();
+  if (v.screen === 'season') return seasonHTML();
+  if (v.screen === 'shame' && ph === 'end') return shameHTML();
+  if (v.screen === 'punish' && ph === 'end') return punishHTML();
   if (ph === 'rules') return rulesHTML();
   if (ph === 'lobby') {
     return `<div class="lobby"><div style="display:grid;gap:1.6cqw">

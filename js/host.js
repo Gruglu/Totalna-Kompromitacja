@@ -3,6 +3,7 @@ import * as E from './engine.js';
 import { hostRoom, randomCode } from './net.js';
 import * as media from './media.js';
 import { rulesFor } from './rules.js';
+import * as S from './season.js';
 
 const LS = { set: 'pk.set', state: 'pk.state', code: 'pk.code', mediaVer: 'pk.mediaVer' };
 const store = {
@@ -47,6 +48,13 @@ let mediaCount = 0;
 let mediaVer = Number(store.get(LS.mediaVer)) || 1;
 let audioStat = null; // stan odtwarzacza z okna streamu
 const thumbs = new Map(); // src -> url dla miniatur w panelu
+let season = S.load(); // ranking sezonu, osobno od stanu gry (przetrwa „Nowa gra”)
+let shameWho = null; // kogo dotyczy wpis do Hall of Shame
+let shameCtx = '';
+let shameDraft = '';
+let shameManual = false;
+let shameOpen = false; // czy pole Hall of Shame jest rozwinięte w trakcie gry // wpisywany tekst, przetrwa przerysowanie panelu
+let armedDel = null; // numer odcinka sezonu do usunięcia (drugie kliknięcie)
 
 const base = location.href.replace(/[^/]*$/, '');
 const peerParam = new URLSearchParams(location.search).get('peer');
@@ -78,6 +86,9 @@ async function boot() {
   }
   if (!state) state = E.newGame(set);
   if (!state.media) state.media = { n: 0, cmd: null };
+  if (!state.shame) state.shame = [];
+  if (!state.punish) state.punish = { winner: null, loser: null, nick: '' };
+  if (state.screen === undefined) state.screen = null;
   startRoom();
   checkMedia();
   render();
@@ -137,7 +148,8 @@ function undo() {
   state.players.forEach((p) => {
     if (!prev.players.some((x) => x.id === p.id)) prev.players.push({ ...p, score: 0 });
   });
-  state = { ...prev, fx: { n: state.fx.n + 1, type: null }, media: state.media };
+  // Hall of Shame i kara nie są cofane razem z punktami
+  state = { ...prev, fx: { n: state.fx.n + 1, type: null }, media: state.media, shame: state.shame, punish: state.punish };
   persist();
   render();
   broadcast();
@@ -150,7 +162,9 @@ function persist() {
 
 function broadcast() {
   if (!state) return;
-  chan.postMessage({ t: 'state', view: E.boardView(state), joinUrl, code, mediaVer });
+  const view = E.boardView(state);
+  if (view.screen === 'season') view.season = S.view(season);
+  chan.postMessage({ t: 'state', view, joinUrl, code, mediaVer });
   if (!room) return;
   for (const p of state.players) if (!p.manual) room.sendTo(p.id, { t: 'state', view: E.playerView(state, p.id) });
 }
@@ -342,6 +356,7 @@ function mainLobby() {
         ${err}
       </div>
       ${chooser()}
+      ${seasonPanel()}
       <div class="hint">Otwórz <b>Ekran streamu</b> i udostępnij to okno na Discordzie (kliknij w nie raz, żeby włączyć dźwięk, <b>F</b> = pełny ekran). Gracze skanują kod ze streamu albo wchodzą w link. Kolejność graczy na streamie zmieniasz strzałkami.</div>
       <div class="actions">
         <button class="btn primary" data-x="opener">Czołówka <kbd>Enter</kbd></button>
@@ -557,6 +572,7 @@ function mainQuestion() {
       ${qBlock(q)}
       <div class="status">${st}<span class="clock" id="clock"></span></div>
       <div class="actions">${acts.join('')}</div>
+      ${shameBox()}
     </div>`;
 }
 
@@ -573,6 +589,7 @@ function mainReveal() {
       <div class="hint" style="font-size:16px"><b>${res}</b> Czas na złośliwy komentarz.</div>
       ${qBlock(q)}
       <div class="actions"><button class="btn primary" data-x="next">Dalej <kbd>Enter</kbd></button></div>
+      ${shameBox()}
     </div>`;
 }
 
@@ -645,20 +662,151 @@ function mainFinal() {
           <button class="btn" data-x="fShow" ${F.shown ? 'disabled' : ''}>Pokaż poprawną na streamie <kbd>S</kbd></button>
           <button class="btn primary" data-x="fNext" ${judged ? '' : 'disabled'}>${F.idx < F.order.length - 1 ? 'Następny gracz' : 'Wyniki końcowe'} <kbd>Enter</kbd></button>
         </div>
+        ${shameBox()}
       </div>`;
   }
   return '';
 }
 
+// ---------- Hall of Shame (w trakcie gry i po odcinku) ----------
+
+// kontekst: o które pytanie chodzi i kto jest domyślnym kandydatem
+function shameContext() {
+  const s = state;
+  if (s.cur && ['question', 'reveal'].includes(s.phase)) {
+    const { cat, q } = questionData();
+    const c = s.cur;
+    const who = c.buzzed || c.result?.id || c.wrong[c.wrong.length - 1] || null;
+    return { key: `${s.round}:${c.c}:${c.q}`, who, q: q.q, a: q.a, cat: cat.name, text: '' };
+  }
+  if (s.phase === 'final-reveal' && s.final) {
+    const id = s.final.order[s.final.idx];
+    const f = s.set.final;
+    return { key: `final:${id}`, who: id, q: f.q, a: f.a, cat: `Finał · ${f.category}`, text: s.final.answers[id] ?? '' };
+  }
+  return { key: 'end', who: null, q: null, a: null, cat: null, text: '' };
+}
+
+function shameBox() {
+  const ctx = shameContext();
+  if (ctx.key !== shameCtx) {
+    shameCtx = ctx.key;
+    shameManual = false;
+    shameDraft = ctx.text;
+  }
+  // dopóki prowadzący nie kliknie kogoś ręcznie, kandydatem jest ten, kto właśnie odpowiadał
+  if (!shameManual) shameWho = ctx.who;
+  const n = (state.shame || []).length;
+  const chips = state.players
+    .map((p) => `<button class="chip${shameWho === p.id ? ' on' : ''}" data-shame-who="${esc(p.id)}">${esc(p.name)}</button>`)
+    .join('');
+  return `<details class="shame-box"${ctx.key === 'end' || shameOpen ? ' open' : ''}>
+    <summary><span class="label">Hall of Shame</span><span class="hint">${n ? `${n} ${plural(n, 'wpis', 'wpisy', 'wpisów')}` : 'pusto'} · zapisz głupią odpowiedź, pokażesz ją po odcinku</span></summary>
+    <div class="row">${chips}</div>
+    <div class="row"><input class="field" id="shame-text" value="${esc(shameDraft)}" placeholder="Co powiedział(a), dosłownie" maxlength="200"><button class="btn small danger" data-x="shameSave">Do Hall of Shame</button></div>
+  </details>`;
+}
+
+function shameList() {
+  const list = state.shame || [];
+  if (!list.length) return '<div class="hint">Nic nie zapisano w trakcie gry. Możesz dopisać tutaj.</div>';
+  return `<div class="shame-list">${list
+    .map(
+      (x) => `<div class="sh${x.star ? ' star' : ''}">
+        <button class="btn small ${x.star ? 'primary' : 'ghost'}" data-shame-star="${x.n}" title="Ta idzie na slajd">${x.star ? 'Na slajdzie' : 'Wybierz'}</button>
+        <div class="sh-body"><b>${esc(x.name)}</b>: „${esc(x.text)}”${x.cat ? `<div class="label">${esc(x.cat)}${x.a ? ` · poprawnie: ${esc(x.a)}` : ''}</div>` : ''}</div>
+        <button class="btn small danger ghost" data-shame-del="${x.n}">Usuń</button>
+      </div>`
+    )
+    .join('')}</div>`;
+}
+
+// ---------- ranking sezonu ----------
+
+function seasonTable(limit = 99) {
+  const rows = S.table(season).slice(0, limit);
+  if (!rows.length) return '<div class="hint">Sezon jest pusty. Wyniki dopisujesz po odcinku przyciskiem „Zapisz odcinek do sezonu”.</div>';
+  return `<table class="ftable"><thead><tr><th>#</th><th>Gracz</th><th>Odc.</th><th>Wygrane</th><th>Ostatnie</th><th>Suma</th></tr></thead><tbody>${rows
+    .map(
+      (r, i) =>
+        `<tr class="${i < S.FINALE_SPOTS ? 'fin' : ''}"><td class="num">${i + 1}.</td><td class="nm">${esc(r.name)}</td><td class="num">${r.played}</td><td class="num">${r.wins}</td><td class="num">${r.lasts}</td><td class="num">${r.total}</td></tr>`
+    )
+    .join('')}</tbody></table>`;
+}
+
+function seasonPanel() {
+  const eps = season.episodes;
+  const onAir = state.screen === 'season';
+  const saved = S.isSaved(season, state) || !!state.seasonSaved;
+  const atEnd = state.phase === 'end';
+  const epList = eps.length
+    ? `<div class="ep-list">${eps
+        .map((e, i) => {
+          const armed = armedDel === i;
+          const top = e.results[0];
+          return `<div><span class="label">${e.ep != null ? `odc. ${esc(e.ep)}` : 'odc. ?'} · ${esc(e.date)}</span><span>wygrywa ${esc(top?.name || '?')}${e.shame?.length ? ` · shame ${e.shame.length}` : ''}</span><button class="btn small danger ${armed ? 'solid' : 'ghost'}" data-season-del="${i}">${armed ? 'Na pewno?' : 'Usuń'}</button></div>`;
+        })
+        .join('')}</div>`
+    : '';
+  const saveRow = atEnd
+    ? `<div class="row"><button class="btn ${saved ? '' : 'primary'}" data-x="seasonSave">${saved ? 'Zapisz ponownie (nadpisze odcinek)' : 'Zapisz odcinek do sezonu'}</button>${
+        saved ? '<span class="hint ok">Odcinek jest w sezonie.</span>' : state.set.episode == null ? '<span class="hint">Zestaw nie ma numeru odcinka, zapis doda nowy wpis.</span>' : ''
+      }</div>`
+    : '';
+  return `<div class="panel">
+    <div class="row" style="justify-content:space-between"><span class="label">Ranking sezonu · ${eps.length} ${plural(eps.length, 'odcinek', 'odcinki', 'odcinków')} · top ${S.FINALE_SPOTS} gra w finale sezonu</span>
+      <button class="btn small ${onAir ? 'primary' : ''}" data-x="${onAir ? 'screenOff' : 'screenSeason'}">${onAir ? 'Zdejmij ze streamu' : 'Pokaż na streamie'}</button></div>
+    ${saveRow}
+    ${seasonTable()}
+    ${epList}
+    <div class="row">
+      <input class="field" id="season-name" value="${esc(season.name)}" maxlength="40" style="max-width:220px" title="Nazwa sezonu">
+      <button class="btn small ghost" data-x="seasonRename">Zmień nazwę</button>
+      <button class="btn small" data-x="seasonExport" ${eps.length ? '' : 'disabled'}>Eksport JSON</button>
+      <button class="btn small" data-x="seasonImport">Import JSON</button>
+    </div>
+    <div class="hint">Sezon trzyma się w tej przeglądarce i nie znika przy „Nowa gra”. Po każdym odcinku zrób eksport i trzymaj plik obok pytań, na wypadek innego komputera. Gracze łączą się po nicku, więc niech nie zmieniają nicków między odcinkami.</div>
+  </div>`;
+}
+
 function mainEnd() {
+  const pun = E.punishment(state);
   const rows = E.standings(state)
     .map((p, i) => `<tr><td class="num">${i + 1}.</td><td class="nm">${esc(p.name)}</td><td class="num">${p.score}</td></tr>`)
     .join('');
+  const scr = state.screen;
+  const tabs = [
+    [null, 'Wyniki odcinka'],
+    ['shame', `Hall of Shame${state.shame?.length ? ` (${state.shame.length})` : ''}`],
+    ['punish', 'Kara'],
+    ['season', 'Ranking sezonu'],
+  ]
+    .map(([k, t]) => `<button class="btn ${scr === k ? 'primary' : ''}" data-screen="${k || ''}">${esc(t)}</button>`)
+    .join('');
+  const chips = (field, cur) =>
+    state.players.map((p) => `<button class="chip${cur === p.id ? ` on${field === 'w' ? ' amber' : ''}` : ''}" data-pun-${field}="${esc(p.id)}">${esc(p.name)}</button>`).join('');
+  const SCRN = { shame: 'Hall of Shame', punish: 'kara', season: 'ranking sezonu' };
   return `
-    <div class="sec-h"><h2>Koniec odcinka</h2><span class="label">ranking na streamie</span></div>
+    <div class="sec-h"><h2>Koniec odcinka</h2><span class="label">na streamie: ${esc(SCRN[scr] || 'wyniki odcinka')}</span></div>
     <div class="qcard">
-      <table class="ftable"><tbody>${rows}</tbody></table>
-      <div class="hint">„Nowa gra” u góry zaczyna od zera z tymi samymi graczami.</div>
+      <div class="actions end-tabs">${tabs}</div>
+      <div class="hint">Proponowana kolejność: wyniki, Hall of Shame, kara, ranking sezonu. Przełączasz, co widzą widzowie; nic się tu nie liczy od nowa.</div>
+      <div class="panel"><span class="label">Wyniki odcinka</span><table class="ftable"><tbody>${rows}</tbody></table></div>
+      <div class="panel">
+        <span class="label">Hall of Shame · na slajd idzie jedna, reszta jako nominacje</span>
+        ${shameList()}
+        ${shameBox()}
+      </div>
+      <div class="panel">
+        <span class="label">Kara dla przegranego</span>
+        <div class="script"><p>${pun.loserName && pun.winnerName ? `${esc(pun.winnerName)}, gratuluję. W nagrodę dostajesz władzę nad ostatnim miejscem, a ostatnie miejsce to dzisiaj ${esc(pun.loserName)}. Wybierasz nowy nick i nowy avatar na Discordzie. Obowiązuje ${pun.days} dni, do ${esc(pun.until)}. Bez zmieniania z powrotem, bez negocjacji, a apelacje przyjmuję w tym samym okienku co zawsze.` : 'Potrzeba co najmniej dwóch graczy.'}</p></div>
+        <div class="row"><span class="label" style="min-width:90px">Wybiera</span>${chips('w', pun.winner)}</div>
+        <div class="row"><span class="label" style="min-width:90px">Cierpi</span>${chips('l', pun.loser)}</div>
+        <div class="row"><input class="field" id="pun-nick" value="${esc(pun.nick)}" placeholder="Nowy nick (wpisz, gdy zwycięzca wybierze)" maxlength="32"><button class="btn small" data-x="punNick">Pokaż nick</button></div>
+        <div class="hint">Domyślnie pierwsze i ostatnie miejsce. Przy remisie kliknij właściwą osobę. Avatar zwycięzca wysyła przegranemu na Discordzie, ekran pokazuje tylko nick.</div>
+      </div>
+      ${seasonPanel()}
+      <div class="hint">„Nowa gra” u góry zaczyna od zera z tymi samymi graczami. Ranking sezonu zostaje.</div>
     </div>`;
 }
 
@@ -677,7 +825,7 @@ function renderMain() {
   else html = mainEnd();
   html += `<div class="keys">
     <span><kbd>Spacja</kbd> otwórz buzzery</span><span><kbd>D</kbd> dobrze</span><span><kbd>Z</kbd> źle</span><span><kbd>P</kbd> połowa</span>
-    <span><kbd>N</kbd> nikt</span><span><kbd>Enter</kbd> dalej</span><span><kbd>M</kbd> muzyka graj/pauza</span><span><kbd>R</kbd> od początku</span><span><kbd>1–6</kbd> zgłoszenie ręczne</span><span><kbd>Ctrl+Z</kbd> cofnij</span></div>`;
+    <span><kbd>N</kbd> nikt</span><span><kbd>Enter</kbd> dalej</span><span><kbd>M</kbd> muzyka graj/pauza</span><span><kbd>R</kbd> od początku</span><span><kbd>1–6</kbd> zgłoszenie ręczne</span><span><kbd>H</kbd> Hall of Shame</span><span><kbd>Ctrl+Z</kbd> cofnij</span></div>`;
   $main.innerHTML = html;
 }
 
@@ -692,12 +840,12 @@ function render() {
   renderPlayers();
   for (const [id, v] of Object.entries(vals)) {
     const el = document.getElementById(id);
-    if (el && !el.dataset.edit) el.value = v;
+    if (el && !el.dataset.edit && id !== 'shame-text') el.value = v;
   }
   if (keep) {
     const el = document.getElementById(keep.id);
     if (el) {
-      el.value = keep.v;
+      if (keep.id !== 'shame-text') el.value = keep.v;
       el.focus();
       try {
         el.setSelectionRange(keep.s, keep.e);
@@ -747,6 +895,49 @@ const x = {
   fWrong: () => dispatch({ type: 'finalJudge', verdict: 'wrong' }),
   fShow: () => dispatch({ type: 'finalShow' }, false),
   fNext: () => dispatch({ type: 'finalNext' }),
+  screenSeason: () => dispatch({ type: 'screen', screen: 'season' }, false),
+  screenOff: () => dispatch({ type: 'screen', screen: null }, false),
+  shameSave() {
+    const el = document.getElementById('shame-text');
+    const text = el?.value.trim();
+    if (!text) return toast('Wpisz, co padło');
+    const ctx = shameContext();
+    if (!shameWho) return toast('Kliknij, kto to powiedział');
+    dispatch({ type: 'shameAdd', id: shameWho, text, q: ctx.q, a: ctx.a, cat: ctx.cat }, false);
+    shameDraft = '';
+    const f = document.getElementById('shame-text');
+    if (f) {
+      f.value = '';
+      f.blur(); // skróty klawiszowe znowu działają
+    }
+    toast(`Zapisane w Hall of Shame (${state.shame.length})`);
+  },
+  punNick() {
+    const v = document.getElementById('pun-nick')?.value ?? '';
+    dispatch({ type: 'punish', nick: v }, false) || render();
+    if (state.screen !== 'punish') dispatch({ type: 'screen', screen: 'punish' }, false);
+  },
+  seasonSave() {
+    const ep = S.episodeFrom(state, E.punishment(state));
+    if (!ep.results.length) return toast('Nie ma graczy');
+    const { replaced, ...next } = S.upsert(season, ep);
+    state = { ...state, seasonSaved: true }; // bez numeru odcinka: nie dopisuj drugi raz przez przypadek
+    persist();
+    setSeason(next);
+    toast(replaced ? 'Odcinek nadpisany w sezonie' : 'Odcinek zapisany w sezonie');
+  },
+  seasonRename() {
+    const v = document.getElementById('season-name')?.value.trim();
+    if (!v) return;
+    setSeason({ ...season, name: v.slice(0, 40) });
+    toast('Nazwa sezonu zmieniona');
+  },
+  seasonExport() {
+    S.download(season);
+  },
+  seasonImport() {
+    document.getElementById('seasonFile').click();
+  },
   addPlayer() {
     addingPlayer = true;
     render();
@@ -768,6 +959,32 @@ document.addEventListener('click', (e) => {
   else if (t.dataset.x) x[t.dataset.x]?.();
   else if (t.dataset.p) playerAction(t.dataset.p, t.dataset.id);
   else if (t.dataset.rule) dispatch({ type: 'rules', idx: Number(t.dataset.rule) }, false);
+  else if (t.dataset.screen !== undefined) dispatch({ type: 'screen', screen: t.dataset.screen || null }, false);
+  else if (t.dataset.shameWho) {
+    shameWho = t.dataset.shameWho;
+    shameManual = true;
+    render();
+  } else if (t.dataset.shameStar) dispatch({ type: 'shameStar', n: Number(t.dataset.shameStar) }, false);
+  else if (t.dataset.shameDel) dispatch({ type: 'shameDel', n: Number(t.dataset.shameDel) }, false);
+  else if (t.dataset.punW) dispatch({ type: 'punish', winner: t.dataset.punW }, false);
+  else if (t.dataset.punL) dispatch({ type: 'punish', loser: t.dataset.punL }, false);
+  else if (t.dataset.seasonDel) {
+    const i = Number(t.dataset.seasonDel);
+    if (armedDel !== i) {
+      armedDel = i;
+      render();
+      setTimeout(() => {
+        if (armedDel === i) {
+          armedDel = null;
+          render();
+        }
+      }, 3000);
+      return;
+    }
+    armedDel = null;
+    setSeason({ ...season, episodes: season.episodes.filter((_, j) => j !== i) });
+    toast('Odcinek usunięty z sezonu');
+  }
   else if (t.dataset.pickJson) {
     const pl = pendingLoad;
     pendingLoad = null;
@@ -810,9 +1027,13 @@ document.addEventListener('keydown', (e) => {
         editing = null;
         render();
       }
-    } else if (e.key === 'Enter') {
+    } else if (e.key === 'Escape') el.blur();
+    else if (e.key === 'Enter') {
       if (el.id === 'ddw') x.ddWager();
       else if (el.id === 'newplayer') x.addPlayerOk();
+      else if (el.id === 'shame-text') x.shameSave();
+      else if (el.id === 'pun-nick') x.punNick();
+      else if (el.id === 'season-name') x.seasonRename();
       else if (el.id.startsWith('fw-')) document.querySelector(`[data-fw="${CSS.escape(el.id.slice(3))}"]`)?.click();
       else if (el.id.startsWith('fa-')) document.querySelector(`[data-fa="${CSS.escape(el.id.slice(3))}"]`)?.click();
     }
@@ -843,6 +1064,13 @@ document.addEventListener('keydown', (e) => {
     else if (ph === 'final-reveal') x.fNext();
     return;
   }
+  if (k === 'h' && document.querySelector('.shame-box')) {
+    e.preventDefault();
+    shameOpen = true;
+    renderMain();
+    document.getElementById('shame-text')?.focus();
+    return;
+  }
   if (ph === 'rules') {
     if (e.key === 'ArrowRight') x.ruleNext();
     else if (e.key === 'ArrowLeft') x.rulePrev();
@@ -868,6 +1096,18 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener(
+  'toggle',
+  (e) => {
+    if (e.target.classList?.contains('shame-box') && state.phase !== 'end') shameOpen = e.target.open;
+  },
+  true
+);
+
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'shame-text') shameDraft = e.target.value;
+});
+
+document.addEventListener(
   'blur',
   (e) => {
     const el = e.target;
@@ -883,7 +1123,7 @@ document.addEventListener(
 async function onFiles(list) {
   const files = [...list].map((file) => ({ file, path: (file.webkitRelativePath || file.name).replace(/\\/g, '/') }));
   if (!files.length) return;
-  const jsons = files.filter((f) => /\.json$/i.test(f.path));
+  const jsons = files.filter((f) => /\.json$/i.test(f.path) && !/(^|\/)ranking-[^/]*\.json$/i.test(f.path));
   const med = files.filter((f) => media.isMediaFile(f.path));
   if (!jsons.length) {
     if (med.length) {
@@ -965,6 +1205,28 @@ async function checkMedia() {
   mediaMissing = out;
   if (state) renderMain();
 }
+
+function setSeason(next) {
+  season = next;
+  if (!S.save(season)) toast('Nie udało się zapisać sezonu w przeglądarce');
+  render();
+  broadcast();
+}
+
+document.getElementById('seasonFile').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  e.target.value = '';
+  if (!f) return;
+  let d;
+  try {
+    d = S.normalize(JSON.parse(await f.text()));
+  } catch {
+    d = null;
+  }
+  if (!d) return toast('To nie jest plik rankingu sezonu');
+  setSeason(d);
+  toast(`Wczytano sezon: ${d.episodes.length} ${plural(d.episodes.length, 'odcinek', 'odcinki', 'odcinków')}`);
+});
 
 for (const id of ['file', 'dir']) {
   document.getElementById(id).addEventListener('change', (e) => {
