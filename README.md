@@ -18,6 +18,10 @@ Nerdowski teleturniej w stylu Jeopardy na Discorda. Statyczna strona (GitHub Pag
 
 Na ekranie końcowym przełączasz, co widzi stream: wyniki odcinka, Hall of Shame, kara, ranking sezonu.
 
+## Mówiące awatary z Discorda (opcjonalnie)
+
+Awatar każdego gracza przy nicku na streamie, podświetlany i z otwartymi ustami, kiedy gracz mówi na kanale głosowym. Działa przez małego bota Discorda uruchamianego u prowadzącego na czas streamu (folder `bot/`, instrukcja w [bot/README.md](bot/README.md)). Bez bota plansza wygląda jak zwykle.
+
 ## Skróty w panelu
 
 `Spacja` otwórz buzzery · `D` dobrze · `Z` źle · `P` połowa · `N` nikt nie wie · `Enter` dalej · `1–6` zgłoszenie ręczne (gdy komuś nie działa telefon) · `Ctrl+Z` cofnij · `M` muzyka graj/pauza · `R` muzyka od początku · `H` Hall of Shame · `←`/`→` poprzednia/następna zasada.

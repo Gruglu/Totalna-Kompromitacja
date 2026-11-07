@@ -1,0 +1,9 @@
+{
+  "token": "TU_WKLEJ_TOKEN_BOTA",
+  "kanal": "Teleturniej",
+  "gracze": [
+    { "discord": "nazwa_uzytkownika_1", "nick": "Kamil", "awatar": "awatary/kamil.png", "mowi": "awatary/kamil-mowi.png" },
+    { "discord": "nazwa_uzytkownika_2", "nick": ["Marek", "Mareczek"], "awatar": "awatary/marek.png", "mowi": "awatary/marek-mowi.png" },
+    { "discord": "123456789012345678", "nick": "Ola", "awatar": "awatary/ola.png", "mowi": "awatary/ola-mowi.png" }
+  ]
+}
