@@ -6,6 +6,7 @@ Nerdowski teleturniej w stylu Jeopardy na Discorda. Statyczna strona (GitHub Pag
 
 1. Prowadzący otwiera `host.html` (panel, tego nie streamuje).
 2. W panelu klika **Ekran streamu**, w nowym oknie klika raz (dźwięk), `F` = pełny ekran. To okno udostępnia na Discordzie.
+   Po kliknięciu Chrome/Edge zapyta o udostępnienie tej karty: **zezwól** (pasek „Udostępniasz tę kartę” można schować przyciskiem „Ukryj”). Bez tego przeglądarka przestaje rysować planszę, gdy jej okno jest zakryte panelem, i Discord pokazuje zamrożony obraz. Obraz z tego udostępnienia nigdzie nie wychodzi. Jeśli ktoś je zatrzyma, plansza pokaże komunikat, a kliknięcie w nią włącza je znowu. Zminimalizowane okno i tak stoi, więc planszy nie minimalizuj.
 3. Gracze wchodzą z telefonu w link albo skanują QR ze streamu (`play.html?r=KOD`) i wpisują nick.
 4. **Wczytaj folder**: folder z pytaniami (plik JSON + podfolder `media/`). Jeśli w folderze jest kilka JSON-ów, panel zapyta, który gramy. **Wczytaj pliki** przyjmuje sam JSON albo JSON razem z plikami mediów. Pytania i media zostają tylko w przeglądarce prowadzącego (localStorage + IndexedDB), nie trafiają do repo.
 5. Start odcinka: **Czołówka** (animacja z muzyką na streamie, ok. 11 s), potem **Zasady** (prowadzący czyta tekst z panelu, stream pokazuje skrót), potem pierwsza runda.

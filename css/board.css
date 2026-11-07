@@ -157,6 +157,10 @@ html, body { height: 100%; overflow: hidden; background: #000; }
 .unlock { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(0, 0, 0, 0.82); cursor: pointer; }
 .unlock div { font-family: var(--f-display); font-weight: 900; font-size: 32px; color: var(--amber); text-transform: uppercase; border: 2px solid var(--amber); padding: 18px 28px; text-align: center; }
 .unlock small { display: block; font-family: var(--f-mono); font-weight: 400; font-size: 13px; letter-spacing: 0.12em; color: var(--amber-dim); margin-top: 8px; }
+.unlock small + small { max-width: 34em; margin-inline: auto; letter-spacing: 0.04em; text-transform: none; line-height: 1.4; }
+.keep-note { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 101; background: var(--screen); border: 2px solid var(--tally); padding: 10px 18px; text-align: center; cursor: pointer; }
+.keep-note b { display: block; font-family: var(--f-display); font-weight: 900; font-size: 20px; text-transform: uppercase; color: var(--tally); }
+.keep-note small { display: block; font-family: var(--f-mono); font-size: 12px; color: var(--amber-dim); margin-top: 4px; }
 .waiting { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--f-crt); font-size: 3cqw; color: var(--amber-dim); }
 
 /* ---------- czołówka ---------- */
