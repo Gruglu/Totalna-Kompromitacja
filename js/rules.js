@@ -1,7 +1,7 @@
 // Zasady czytane przed pierwszą rundą. Każda zasada ma krótką wersję na stream
 // ("board") i pełny tekst dla prowadzącego ("host"), który czyta się na głos.
 // Zestaw pytań może podać własne "rules" w tym samym kształcie i wtedy zastępują te.
-import { ANSWER_SECONDS, FINAL_SECONDS, DD_MIN, DD_PER_ROUND, mediaRefs } from './engine.js';
+import { ANSWER_SECONDS, FINAL_SECONDS, DD_MIN, DD_PER_ROUND, PUNISH_DAYS, mediaRefs } from './engine.js';
 
 const plural = (n, one, few, many) => {
   if (n === 1) return one;
@@ -98,9 +98,15 @@ export function defaultRules(set) {
   }
 
   list.push({
+    title: 'Kara',
+    board: ['zwycięzca wybiera nick i avatar dla ostatniego miejsca', `obowiązuje ${PUNISH_DAYS} dni`, 'bez zmieniania z powrotem, bez negocjacji'],
+    host: `Teraz najważniejsze. Kto wygra, dostaje władzę nad tym, kto będzie ostatni: wybiera tej osobie nowy nick i nowy avatar na Discordzie. Obowiązuje ${PUNISH_DAYS} dni. Nie zmieniacie z powrotem, nie negocjujecie, nie płaczecie na kanale. A najgłupsza odpowiedź wieczoru trafia do Hall of Shame i zostaje tam na zawsze, więc zastanówcie się dwa razy, zanim coś powiecie. Albo nie, mnie to bawi.`,
+  });
+
+  list.push({
     title: 'Na koniec',
-    board: ['wygrywa najwyższy wynik', 'ostatnie miejsce dostaje tytuł', 'totalna kompromitacja'],
-    host: 'Kto ma najwięcej punktów, wygrywa i może się chwalić do następnego odcinka. Kto będzie ostatni, odchodzi z tytułem Totalnej Kompromitacji odcinka. Telefony w dłoń, zaczynamy.',
+    board: ['wygrywa najwyższy wynik', 'punkty idą do rankingu sezonu', 'top 3 sezonu gra w wielkim finale'],
+    host: 'Kto ma najwięcej punktów, wygrywa odcinek i może się chwalić do następnego. Punkty z każdego odcinka sumują się w rankingu sezonu, a trójka z góry tabeli zagra na koniec w finale sezonu. Reszta będzie patrzeć. Telefony w dłoń, zaczynamy.',
   });
 
   return list;

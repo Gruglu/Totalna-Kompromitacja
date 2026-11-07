@@ -225,3 +225,50 @@ html, body { height: 100%; overflow: hidden; background: #000; }
 .rlines { display: grid; align-content: start; gap: 1.2cqw; position: relative; }
 .rlines div { font-family: var(--f-crt); font-size: 4cqw; line-height: 1.05; color: var(--hot); text-shadow: 0 0 0.6cqw rgba(255, 214, 140, 0.4); animation: typein 0.3s steps(8) both; animation-delay: calc(0.35s + var(--i) * 0.3s); max-width: 40ch; }
 .rlines div::before { content: '> '; color: var(--amber); }
+
+/* ---------- ranking sezonu ---------- */
+.season { position: absolute; inset: 0; padding: 2.4cqw 6cqw 1.6cqw; display: grid; grid-template-rows: auto 1fr; gap: 1.4cqw; overflow: hidden; }
+.shead { display: grid; grid-template-columns: auto 1fr; align-items: end; gap: 0.2cqw 2.4cqw; }
+.shead .sub:first-child { grid-column: 1 / -1; }
+.shead .stitle { font-family: var(--f-display); font-weight: 900; font-size: 6.4cqw; line-height: 0.85; text-transform: uppercase; color: var(--amber); text-shadow: 0 0 1.2cqw rgba(255, 178, 46, 0.45); animation: typein 0.35s steps(8) both; }
+.shead .sub:last-child { justify-self: end; padding-bottom: 0.6cqw; }
+.srows { display: grid; align-content: start; gap: 0.4cqw; }
+.srow { display: grid; grid-template-columns: 5cqw 1fr auto 12cqw; align-items: center; gap: 2cqw; border-bottom: 1px solid var(--line); padding: 0.3cqw 1cqw; animation: typein 0.3s steps(3) both; animation-delay: calc(0.5s + var(--i) * 0.3s); }
+.srow .pos { font-family: var(--f-crt); font-size: 3cqw; color: var(--amber-dim); }
+.srow .nm { font-family: var(--f-display); font-weight: 800; font-size: 3cqw; line-height: 1; text-transform: uppercase; color: var(--hot); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .nm small { display: block; font-family: var(--f-mono); font-weight: 600; font-size: 0.95cqw; letter-spacing: 0.14em; color: var(--amber-dim); margin-top: 0.3cqw; }
+.srow .sc { font-family: var(--f-crt); font-size: 3.8cqw; line-height: 1; color: var(--amber); text-shadow: var(--glow); font-variant-numeric: tabular-nums; text-align: right; }
+.srow .ftag { font-family: var(--f-mono); font-size: 1cqw; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--screen); background: var(--amber); padding: 0.2cqw 0.7cqw; }
+.srow.fin { box-shadow: inset 0.4cqw 0 0 var(--amber); }
+.srow.first { background: var(--amber); }
+.srow.first .pos, .srow.first .nm, .srow.first .nm small, .srow.first .sc { color: var(--screen); text-shadow: none; }
+.srow.first .ftag { background: var(--screen); color: var(--amber); }
+.cutline { position: relative; height: 1.6cqw; animation: typein 0.3s steps(3) both; animation-delay: calc(0.5s + var(--i) * 0.3s); }
+.cutline::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 0.2cqw dashed var(--tally); }
+.cutline span { position: absolute; right: 2cqw; top: 50%; transform: translateY(-50%); background: var(--screen); padding: 0 0.8cqw; font-family: var(--f-mono); font-size: 0.95cqw; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--tally); }
+
+/* ---------- Hall of Shame ---------- */
+.shame { position: absolute; inset: 0; padding: 2.4cqw 6cqw 1.8cqw; display: grid; grid-template-rows: auto auto auto 1fr auto auto; align-content: start; gap: 1.2cqw; overflow: hidden; }
+.sh-top { display: flex; align-items: center; gap: 2cqw; }
+.sh-band { background: var(--tally); color: var(--screen); font-family: var(--f-display); font-weight: 900; font-size: 4.6cqw; line-height: 0.9; text-transform: uppercase; padding: 0.6cqw 1.6cqw 0.8cqw; animation: ddflash 0.1s steps(2) 6; }
+.sh-q { font-family: var(--f-crt); font-size: 2.3cqw; line-height: 1.1; color: var(--amber-dim); max-width: 70ch; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sh-q span { font-family: var(--f-mono); font-size: 1cqw; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); margin-right: 1cqw; vertical-align: 0.3cqw; }
+.sh-who { font-family: var(--f-display); font-weight: 800; font-size: 2.6cqw; text-transform: uppercase; color: var(--tally); animation: typein 0.3s steps(6) both; animation-delay: 0.4s; }
+.sh-quote { font-family: var(--f-crt); font-size: var(--s, 6cqw); line-height: 1; color: var(--hot); text-shadow: 0 0 0.8cqw rgba(255, 214, 140, 0.5); align-self: center; overflow-wrap: anywhere; animation: typein 0.9s steps(20) both; animation-delay: 0.8s; }
+.sh-ans { animation: pop 0.3s steps(3) both; animation-delay: 2.2s; }
+.sh-ans .a { font-size: 3.2cqw; }
+.sh-stamp { position: absolute; right: 5cqw; top: 3cqw; border: 0.3cqw solid var(--tally); color: var(--tally); font-family: var(--f-display); font-weight: 900; font-size: 2.2cqw; text-transform: uppercase; padding: 0.4cqw 1.2cqw; transform: rotate(-6deg); opacity: 0.9; animation: stamp 0.25s steps(3) both; animation-delay: 2.8s; }
+@keyframes stamp { from { opacity: 0; transform: rotate(-6deg) scale(2.4); } to { opacity: 0.9; transform: rotate(-6deg) scale(1); } }
+.noms { display: flex; flex-wrap: wrap; gap: 0.4cqw 2.4cqw; align-items: baseline; border-top: 1px solid var(--line); padding-top: 0.8cqw; font-family: var(--f-crt); font-size: 1.9cqw; color: var(--amber-dim); animation: typein 0.4s steps(6) both; animation-delay: 3.2s; }
+.noms .lab { font-family: var(--f-mono); font-size: 1cqw; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--tally); }
+.noms b { font-family: var(--f-display); font-weight: 800; font-size: 1.6cqw; text-transform: uppercase; color: var(--hot); margin-right: 0.6cqw; }
+
+/* ---------- kara ---------- */
+.punish .pl-lines { display: grid; gap: 1cqw; }
+.punish .pl-lines div { font-family: var(--f-crt); font-size: 3.6cqw; line-height: 1.05; color: var(--hot); text-shadow: 0 0 0.6cqw rgba(255, 214, 140, 0.4); animation: typein 0.3s steps(8) both; animation-delay: calc(1s + var(--i) * 0.45s); }
+.punish .pl-lines div::before { content: '> '; color: var(--amber); }
+.punish .pl-lines b { font-family: var(--f-display); font-weight: 800; text-transform: uppercase; color: var(--amber); font-size: 0.9em; }
+.punish .pl-lines b.red { color: var(--tally); }
+.newnick { display: flex; align-items: stretch; }
+.newnick span { background: var(--tally); color: var(--screen); font-family: var(--f-display); font-weight: 900; font-size: 1.8cqw; text-transform: uppercase; padding: 0.6cqw 1.2cqw; display: flex; align-items: center; }
+.newnick b { border: 0.2cqw solid var(--tally); border-left: 0; font-family: var(--f-crt); font-weight: 400; font-size: 5cqw; line-height: 1; color: var(--hot); text-shadow: var(--glow); padding: 0.4cqw 1.6cqw; }

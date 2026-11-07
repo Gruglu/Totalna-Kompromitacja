@@ -124,3 +124,28 @@ body { font-size: 14px; }
 .keys { margin-top: 20px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--amber-dim); }
 .keys span { display: inline-flex; gap: 6px; align-items: center; }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--amber); color: var(--screen); font-family: var(--f-display); font-weight: 800; text-transform: uppercase; font-size: 18px; padding: 10px 16px; z-index: 60; }
+
+/* Hall of Shame, kara, sezon */
+.chip { appearance: none; background: transparent; border: 1px solid var(--line); color: var(--amber-dim); font-family: var(--f-display); font-weight: 800; font-size: 15px; text-transform: uppercase; padding: 5px 10px; cursor: pointer; }
+.chip:hover { border-color: var(--amber); color: var(--amber); }
+.chip.on { background: var(--tally); border-color: var(--tally); color: var(--screen); }
+.shame-box { border: 1px dashed var(--tally); padding: 8px 12px; display: grid; gap: 8px; }
+.shame-box[open] { padding-bottom: 12px; }
+.shame-box summary { cursor: pointer; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; list-style: none; }
+.shame-box summary::-webkit-details-marker { display: none; }
+.shame-box summary .label { color: var(--tally); }
+.shame-box summary .label::before { content: '+ '; }
+.shame-box[open] summary .label::before { content: '− '; }
+.shame-box > .row { margin-top: 8px; }
+.shame-list { display: grid; gap: 6px; }
+.shame-list .sh { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--line); padding: 8px 10px; }
+.shame-list .sh.star { border-color: var(--amber); box-shadow: inset 4px 0 0 var(--amber); }
+.shame-list .sh-body { font-family: var(--f-crt); font-size: 22px; line-height: 1.1; color: var(--hot); overflow-wrap: anywhere; }
+.shame-list .sh-body b { font-family: var(--f-display); font-weight: 800; font-size: 17px; text-transform: uppercase; color: var(--tally); }
+.shame-list .sh-body .label { margin-top: 2px; }
+.ep-list { display: grid; gap: 4px; }
+.ep-list > div { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 10px; align-items: center; border-bottom: 1px solid var(--line-soft); padding: 4px 0; font-size: 13px; }
+.ftable tr.fin td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+.ftable tr.fin .nm { color: var(--amber); }
+.end-tabs .btn { font-size: 17px; padding: 10px 14px; }
+.chip.on.amber { background: var(--amber); border-color: var(--amber); }
