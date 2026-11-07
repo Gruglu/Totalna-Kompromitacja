@@ -71,16 +71,73 @@ function reportAvatars(force) {
 }
 setInterval(() => !view && chan.postMessage({ t: 'hello' }), 1000);
 
+// Chrome i Edge na Windows przestają rysować okno, które jest zakryte innym oknem,
+// a Discord udostępniający to okno pokazuje wtedy zamrożony obraz. Karta, która jest
+// nagrywana, jest dla przeglądarki zawsze „widoczna”, więc plansza udostępnia sama
+// siebie. Strumień nigdzie nie wychodzi, tylko trzyma okno przy życiu.
+const CAN_KEEP_ALIVE = !PREVIEW && !!navigator.mediaDevices?.getDisplayMedia && !!navigator.userAgentData;
+let keepStream = null;
+let keepAsked = false;
+
+async function keepAlive() {
+  if (!CAN_KEEP_ALIVE || keepStream || keepAsked) return;
+  keepAsked = true;
+  try {
+    const s = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 1, width: 160, height: 90 },
+      audio: false,
+      preferCurrentTab: true,
+      selfBrowserSurface: 'include',
+      surfaceSwitching: 'exclude',
+      monitorTypeSurfaces: 'exclude',
+    });
+    const tr = s.getVideoTracks()[0];
+    if (tr?.getSettings().displaySurface && tr.getSettings().displaySurface !== 'browser') {
+      // ktoś wybrał ekran albo okno zamiast tej karty: to nic nie daje, więc puszczamy
+      s.getTracks().forEach((x) => x.stop());
+      throw new Error('not-tab');
+    }
+    keepStream = s;
+    window.__keepAlive = s;
+    tr.onended = () => {
+      keepStream = null;
+      notice('Plansza może zamarzać w tle', 'kliknij w nią, żeby znowu udostępnić tę kartę');
+    };
+  } catch {
+    notice('Plansza może zamarzać w tle', 'kliknij w nią i wybierz „ta karta”, albo nie zakrywaj tego okna');
+  } finally {
+    keepAsked = false;
+  }
+}
+
+let noticeEl = null;
+function notice(title, sub) {
+  noticeEl?.remove();
+  noticeEl = document.createElement('div');
+  noticeEl.className = 'keep-note';
+  noticeEl.innerHTML = `<b>${esc(title)}</b><small>${esc(sub)}</small>`;
+  document.body.appendChild(noticeEl);
+  const el = noticeEl;
+  setTimeout(() => el.remove(), 8000);
+}
+
 // dźwięk wymaga jednego kliknięcia w oknie streamu
 if (!PREVIEW) {
   const ov = document.createElement('div');
   ov.className = 'unlock';
-  ov.innerHTML = '<div>Kliknij, żeby włączyć dźwięk<small>raz, przed startem streamu</small></div>';
+  ov.innerHTML = CAN_KEEP_ALIVE
+    ? '<div>Kliknij, żeby włączyć dźwięk<small>raz, przed startem streamu</small><small>potem zezwól na udostępnienie tej karty: dzięki temu plansza nie zamarza, gdy okno jest zakryte</small></div>'
+    : '<div>Kliknij, żeby włączyć dźwięk<small>raz, przed startem streamu</small></div>';
   ov.onclick = () => {
     sound.unlock();
     sound.play('bonus');
     ov.remove();
+    keepAlive();
   };
+  // gdy udostępnianie karty zostało zatrzymane, każde kliknięcie w planszę je wznawia
+  document.addEventListener('click', (e) => {
+    if (!ov.isConnected && !keepStream && e.target !== ov && !ov.contains(e.target)) keepAlive();
+  });
   document.body.appendChild(ov);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'f' || e.key === 'F') {
@@ -781,5 +838,13 @@ function drawViz(playing) {
   audioTick();
   requestAnimationFrame(loop);
 })();
+// requestAnimationFrame stoi, gdy karta jest ukryta: wtedy liczymy dalej na zegarze,
+// żeby po powrocie (albo w nagrywanej karcie) stan był od razu aktualny
+setInterval(() => {
+  if (document.hidden) {
+    tick();
+    audioTick();
+  }
+}, 250);
 
 window.addEventListener('beforeunload', () => chan.close());
