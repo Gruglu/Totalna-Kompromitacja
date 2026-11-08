@@ -35,6 +35,19 @@ Awatar każdego gracza przy nicku na planszy, podświetlany i z otwartymi ustami
 
 `Spacja` otwórz buzzery · `D` dobrze · `Z` źle · `P` połowa · `N` nikt nie wie · `Enter` dalej · `1–6` zgłoszenie ręczne (gdy komuś nie działa telefon) · `Ctrl+Z` cofnij · `M` muzyka graj/pauza · `R` muzyka od początku · `H` Hall of Shame · `←`/`→` poprzednia/następna zasada.
 
+## Własne pytania bez pisania JSON-a: edytor
+
+`edytor.html` (na stronie głównej „Układam pytania”, w panelu przycisk **Edytor pytań**) to edytor zestawu w przeglądarce, dla każdego, kto chce zagrać swoimi pytaniami:
+
+- rundy (do 4) z nazwą, stawkami i liczbą pól „wszystko albo nic”, kategorie (do 8) i wiersze (do 10) dodawane i usuwane jak na planszy,
+- pytanie: treść, odpowiedź, inne dobre odpowiedzi, ciekawostka dla prowadzącego, opcjonalnie obrazek z pytaniem, obrazek po odpowiedzi i klip audio (link `https://…` albo ścieżka `media/plik.jpg` do wczytania folderem w panelu), z podglądem,
+- finał (opcjonalnie), nazwa na logo planszy, podpis w czołówce, numer odcinka,
+- lista braków („Gotowość”), kliknięcie przenosi do pola,
+- kilka zestawów naraz, zapis automatyczny w tej przeglądarce (localStorage), **Eksportuj JSON** / **Importuj JSON** w formacie poniżej, **Weź z panelu** robi kopię zestawu wczytanego w panelu,
+- **Zagraj tym zestawem** sprawdza zestaw i wczytuje go do panelu prowadzącego (do otwartego w innej karcie albo otwiera panel).
+
+Skróty: `Ctrl+Enter` następne pytanie, `Ctrl+Shift+Enter` poprzednie, `Ctrl+S` zapis.
+
 ## Plik z pytaniami
 
 Wzór: `pytania/przyklad.json`. Każda runda ma `values` (stawki) i `categories`; każda kategoria ma tyle pytań, ile stawek.
