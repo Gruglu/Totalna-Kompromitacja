@@ -458,6 +458,8 @@ function step() {
 // ---------- rysowanie ----------
 
 const $top = document.getElementById('top');
+// wysokość paska (zawija się w wąskim oknie), pod nim stoi prawa kolumna z podglądem
+new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', $top.offsetHeight + 'px')).observe($top);
 const $main = document.getElementById('main');
 const $players = document.getElementById('players');
 
