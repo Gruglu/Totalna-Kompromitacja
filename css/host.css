@@ -166,3 +166,27 @@ body.pv-phone .preview { aspect-ratio: 390 / 480; max-width: 390px; }
 .ftable tr.fin .nm { color: var(--amber); }
 .end-tabs .btn { font-size: 17px; padding: 10px 14px; }
 .chip.on.amber { background: var(--amber); border-color: var(--amber); }
+
+/* ---------- koło fortuny ---------- */
+.mini button.wh::after { content: 'KOŁO'; position: absolute; top: 3px; right: 4px; font-family: var(--f-mono); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; color: var(--amber); text-shadow: none; }
+.mini button.wh { border-color: var(--amber-dim); }
+.mini button.wh:disabled::after { content: ''; }
+.wheel-box summary { cursor: pointer; list-style: none; }
+.wheel-box summary::-webkit-details-marker { display: none; }
+.wheel-box summary .label::before { content: '▸ '; }
+.wheel-box[open] summary .label::before { content: '▾ '; }
+.wheel-box[open] { gap: 12px; }
+.wlist { display: grid; gap: 8px; max-height: 420px; overflow: auto; }
+.wq { border: 1px solid var(--line); padding: 8px 10px; display: grid; gap: 4px; background: var(--cell); }
+.wq.used { opacity: 0.5; }
+.wq-h { display: flex; gap: 10px; align-items: baseline; }
+.wq-h b { font-family: var(--f-display); font-weight: 800; text-transform: uppercase; color: var(--amber); font-size: 16px; }
+.wq-q { color: var(--hot); }
+.wq-a { color: var(--amber-dim); font-size: 13px; }
+.wq .row { margin-top: 2px; }
+.wcount { font-family: var(--f-mono); font-size: 12px; border: 1px solid var(--line); padding: 3px 8px; color: var(--amber-dim); }
+.wcount.ok { border-color: var(--amber-dim); color: var(--amber); }
+.wform { display: grid; gap: 8px; border: 1px dashed var(--amber-dim); padding: 10px; }
+.wform textarea.field { width: 100%; resize: vertical; }
+.wown { font-size: 16px; color: var(--tally); }
+.wown b { color: var(--hot); }

@@ -2,7 +2,6 @@
 import * as E from './engine.js';
 import { hostRoom, randomCode } from './net.js';
 import * as media from './media.js';
-import { rulesFor } from './rules.js';
 import * as S from './season.js';
 import * as avatars from './avatars.js';
 
@@ -59,6 +58,11 @@ let shameDraft = '';
 let shameManual = false;
 let shameOpen = false; // czy pole Hall of Shame jest rozwinięte w trakcie gry // wpisywany tekst, przetrwa przerysowanie panelu
 let armedDel = null; // numer odcinka sezonu do usunięcia (drugie kliknięcie)
+let wheelForm = null; // null | 'new' | id pytania z koła w edycji
+let wheelDraft = { author: '', q: '', a: '', alt: '', note: '' };
+let wheelArmed = null; // id pytania (albo 'clear') czekające na drugie kliknięcie
+let wheelOpen = false; // czy lista pytań na koło jest rozwinięta w trakcie gry
+let wheelTimer = null;
 
 // podgląd planszy w panelu: rozmiar, dźwięk u prowadzącego, wygląd telefonu
 const prefs = { size: 'm', sound: true, phone: false };
@@ -132,6 +136,7 @@ async function boot() {
   if (!state.shame) state.shame = [];
   if (!state.punish) state.punish = { winner: null, loser: null, nick: '' };
   if (state.screen === undefined) state.screen = null;
+  if (!state.wheel) state.wheel = { pool: E.poolFromSet(state.set), cells: {} };
   startRoom();
   checkMedia();
   render();
@@ -173,6 +178,15 @@ function startRoom() {
         if (state.phase === 'dd' && state.picker === token) dispatch({ type: 'ddWager', amount: m.amount }, true);
         else if (state.phase === 'final-wager') dispatch({ type: 'finalWager', id: token, amount: m.amount }, false);
       } else if (m.t === 'answer') dispatch({ type: 'finalAnswer', id: token, text: m.text }, false);
+      else if (m.t === 'wheelQ') {
+        const fields = { q: String(m.q ?? '').slice(0, 400), a: String(m.a ?? '').slice(0, 200), alt: String(m.alt ?? '').slice(0, 300) };
+        if (m.id) dispatch({ type: 'wheelEdit', id: String(m.id), byPlayer: token, fields }, false);
+        else if (dispatch({ type: 'wheelAdd', from: 'player', authorId: token, ...fields }, false)) toast(`${E.nameOf(state, token)} wysyła pytanie na koło`);
+      } else if (m.t === 'wheelDel') dispatch({ type: 'wheelDel', id: String(m.id), byPlayer: token }, false);
+      else if (m.t === 'wheelPass' && state.picker === token) {
+        if (m.random) dispatch({ type: 'wheelDraw' });
+        else dispatch({ type: 'wheelPass', id: String(m.id) });
+      }
     },
   });
 }
@@ -205,7 +219,10 @@ function undo() {
     if (!prev.players.some((x) => x.id === p.id)) prev.players.push({ ...p, score: 0 });
   });
   // Hall of Shame i kara nie są cofane razem z punktami
-  state = { ...prev, fx: { n: state.fx.n + 1, type: null }, media: state.media, shame: state.shame, punish: state.punish };
+  // pytania na koło: zostaje aktualna lista (gracze mogli coś dopisać), cofa się tylko to, co już wylosowano
+  const used = new Map(E.wheelPool(prev).map((x) => [x.id, x.used]));
+  const wheel = { ...(prev.wheel || {}), pool: E.wheelPool(state).map((x) => ({ ...x, used: used.get(x.id) ?? false })) };
+  state = { ...prev, fx: { n: state.fx.n + 1, type: null }, media: state.media, shame: state.shame, punish: state.punish, wheel };
   persist();
   render();
   broadcast();
@@ -400,7 +417,7 @@ const actions = {
     armedNew = false;
     const keep = state.players.map(({ id, name, connected, manual }) => ({ id, name, connected, manual }));
     history = [];
-    state = E.newGame(set, keep);
+    state = E.newGame(set, keep, E.wheelPool(state).filter((x) => x.from !== 'file').concat(E.poolFromSet(set)));
     persist();
     render();
     broadcast();
@@ -487,11 +504,11 @@ function renderTop() {
 function renderPlayers() {
   const s = state;
   const cur = s.cur;
-  const qOpen = s.phase === 'question' && cur && !cur.dd && !cur.buzzed;
+  const qOpen = s.phase === 'question' && cur && !E.solo(cur) && !cur.buzzed;
   const html = s.players
     .map((p, i) => {
       let cls = 'pl';
-      if (s.picker === p.id && ['board', 'dd', 'round-intro'].includes(s.phase)) cls += ' pick';
+      if (s.picker === p.id && ['board', 'dd', 'round-intro', 'wheel'].includes(s.phase)) cls += ' pick';
       if (cur && cur.buzzed === p.id && s.phase === 'question') cls += ' buzz';
       const conn = p.manual ? 'manual' : p.connected ? '' : 'off';
       const nm =
@@ -562,6 +579,7 @@ function mainLobby() {
         ${err}
       </div>
       ${chooser()}
+      ${wheelPanel(true)}
       ${seasonPanel()}
       ${avatarInfo()}
       <div class="hint">Gracze wchodzą w link na telefonie albo komputerze i widzą planszę u siebie, razem z obrazkami i muzyką. Streamowanie nie jest potrzebne. Najlepiej: plansza na komputerze, buzzer na telefonie (gracz wchodzi na komputerze, a telefon paruje kodem QR z dołu swojego ekranu), albo wszystko na jednym telefonie. Podgląd obok pokazuje dokładnie to, co widzą. Kolejność graczy na planszy zmieniasz strzałkami.</div>
@@ -634,7 +652,7 @@ function mainOpener() {
 }
 
 function mainRules() {
-  const list = rulesFor(set);
+  const list = E.rulesOf(state);
   const i = state.rule;
   const r = list[i];
   const last = i === list.length - 1;
@@ -677,19 +695,21 @@ function mainBoard() {
     r.categories.forEach((_, c) => {
       const k = E.key(state.round, c, q);
       const used = state.used[k];
-      cells += `<button data-pickq="${c}:${q}" class="${state.dd[k] ? 'dd' : ''}" ${used ? 'disabled' : ''}>${used ? '' : v}</button>`;
+      const wh = state.wheel?.cells?.[k] && !state.dd[k];
+      cells += `<button data-pickq="${c}:${q}" class="${state.dd[k] ? 'dd' : wh ? 'wh' : ''}" ${used ? 'disabled' : ''}>${used ? '' : v}</button>`;
     });
   });
   return `
     <div class="sec-h"><h2>Plansza</h2><span class="label">wybiera ${esc(E.nameOf(state, state.picker))} · kliknij pole, które poda</span></div>
     <div class="mini" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
-    <div class="hint" style="margin-top:12px">Pola oznaczone <b style="color:var(--tally)">W/N</b> to „wszystko albo nic”. Widzisz je tylko Ty.</div>
-    <div class="actions" style="margin-top:12px"><button class="btn ghost small" data-x="endRound">Zakończ rundę wcześniej</button></div>`;
+    <div class="hint" style="margin-top:12px">Pola oznaczone <b style="color:var(--tally)">W/N</b> to „wszystko albo nic”, a <b style="color:var(--amber)">KOŁO</b> to koło fortuny z pytaniami graczy${E.wheelLeft(state).length ? '' : ' (pytania na kole się skończyły, takie pole zagra jako zwykłe)'}. Widzisz je tylko Ty.</div>
+    ${wheelExtra()}
+    <div class="actions" style="margin-top:12px"><button class="btn ghost small" data-x="endRound">Zakończ rundę wcześniej</button></div>
+    <div style="margin-top:16px">${wheelPanel(false)}</div>`;
 }
 
 function questionData() {
-  const r = E.roundOf(state);
-  return { cat: r.categories[state.cur.c], q: r.categories[state.cur.c].questions[state.cur.q] };
+  return { cat: { name: E.curCategory(state) }, q: E.curQuestion(state) || { q: '', a: '' } };
 }
 
 function qBlock(q, reveal = true) {
@@ -783,6 +803,145 @@ function audioBlock(q) {
   </div>`;
 }
 
+// ---------- koło fortuny: pytania graczy ----------
+
+function armWheel(k) {
+  wheelArmed = k;
+  render();
+  setTimeout(() => {
+    if (wheelArmed === k) {
+      wheelArmed = null;
+      render();
+    }
+  }, 3000);
+}
+
+const FROM = { player: 'z telefonu', host: 'wpisane przez Ciebie', file: 'z pliku' };
+
+function wheelForms() {
+  const d = wheelDraft;
+  const isPl = state.players.some((p) => p.id === d.author);
+  const opts = state.players.map((p) => `<option value="${esc(p.id)}" ${d.author === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  return `<div class="wform">
+    <div class="row">
+      <label class="label" for="wf-author">Autor</label>
+      <select class="field" id="wf-author" data-wf="author" style="max-width:220px"><option value="" ${!d.author ? 'selected' : ''}>wybierz gracza</option>${opts}${
+        !isPl && d.author ? `<option value="${esc(d.author)}" selected>${esc(d.author)} (spoza gry)</option>` : ''
+      }</select>
+      <input class="field" id="wf-author-free" placeholder="albo wpisz nick" maxlength="24" value="${isPl ? '' : esc(d.author)}" data-wf="author" style="max-width:180px">
+    </div>
+    <textarea class="field" id="wf-q" data-wf="q" rows="2" maxlength="400" placeholder="Pytanie">${esc(d.q)}</textarea>
+    <div class="row">
+      <input class="field" id="wf-a" data-wf="a" maxlength="200" placeholder="Odpowiedź" value="${esc(d.a)}">
+      <input class="field" id="wf-alt" data-wf="alt" maxlength="300" placeholder="Inne dobre odpowiedzi, po średniku" value="${esc(d.alt)}">
+    </div>
+    <input class="field" id="wf-note" data-wf="note" maxlength="300" placeholder="Ciekawostka dla Ciebie (opcjonalnie)" value="${esc(d.note)}">
+    <div class="row"><button class="btn small primary" data-x="wheelSave">${wheelForm === 'new' ? 'Dodaj na koło' : 'Zapisz zmiany'}</button><button class="btn small ghost" data-x="wheelCancelForm">Anuluj</button></div>
+  </div>`;
+}
+
+function wheelPanel(lobby) {
+  const pool = E.wheelPool(state);
+  const left = pool.filter((x) => !x.used).length;
+  const per = state.players
+    .map((p) => {
+      const n = E.wheelMine(state, p.id).length;
+      return `<span class="wcount${n >= E.WHEEL_PER_PLAYER ? ' ok' : ''}">${esc(p.name)} ${n}/${E.WHEEL_PER_PLAYER}</span>`;
+    })
+    .join('');
+  const rows = pool
+    .map((it) => {
+      const armed = wheelArmed === it.id;
+      return `<div class="wq${it.used ? ' used' : ''}">
+        <div class="wq-h"><b>${esc(E.authorName(state, it))}</b><span class="label">${FROM[it.from] || ''}${it.used ? ' · już było' : ''}</span></div>
+        <div class="wq-q">${esc(it.q)}</div>
+        <div class="wq-a"><span class="label">odp.</span> ${esc(it.a)}${it.alt?.length ? ` <span class="label">też:</span> ${it.alt.map(esc).join(', ')}` : ''}</div>
+        <div class="row"><button class="btn small ghost" data-wheel-edit="${esc(it.id)}">Popraw</button><button class="btn small danger ${armed ? 'solid' : 'ghost'}" data-wheel-del="${esc(it.id)}" ${state.cur?.wheel?.pick === it.id ? 'disabled' : ''}>${armed ? 'Na pewno?' : 'Usuń'}</button></div>
+      </div>`;
+    })
+    .join('');
+  const plan = E.wheelPlan(state.set, left);
+  const planTxt = state.phase === 'lobby' && left ? ` Na start: ${plan.map((n, i) => `${n} w R${i + 1}`).join(', ')} pól z kołem (ukryte, jak „wszystko albo nic”).` : '';
+  const body = `
+    <div class="hint">Gracze wpisują po ${E.WHEEL_PER_PLAYER} pytania na swoim telefonie albo komputerze (w poczekalni, pod buzzerem). Widzisz je tylko Ty. Pytania z czapy usuń albo popraw, zanim zaczniecie.${planTxt}</div>
+    ${per ? `<div class="row">${per}</div>` : ''}
+    ${rows ? `<div class="wlist">${rows}</div>` : '<div class="hint">Na kole nie ma jeszcze żadnego pytania.</div>'}
+    ${wheelForm ? wheelForms() : `<div class="row"><button class="btn small" data-x="wheelNew">+ Pytanie za gracza</button>${pool.length ? `<button class="btn small danger ${wheelArmed === 'clear' ? 'solid' : 'ghost'}" data-x="wheelClear" ${state.phase === 'wheel' ? 'disabled' : ''}>${wheelArmed === 'clear' ? 'Na pewno? Kliknij znowu' : 'Wyczyść koło'}</button>` : ''}</div>`}`;
+  const head = `Koło fortuny · ${pool.length} ${plural(pool.length, 'pytanie', 'pytania', 'pytań')} graczy${pool.length ? ` · zostało ${left}` : ''}`;
+  if (lobby) return `<div class="panel wheel-panel"><span class="label">${head}</span>${body}</div>`;
+  return `<details class="wheel-box panel"${wheelOpen || wheelForm ? ' open' : ''}><summary><span class="label">${head}</span></summary>${body}</details>`;
+}
+
+// dodatkowy obrót spoza planszy, gdy na kole zostały pytania
+function wheelExtra() {
+  const left = E.wheelLeft(state).length;
+  if (!left) return '';
+  const r = E.roundOf(state);
+  const vals = [...new Set(r.values)];
+  const mid = vals[Math.floor(vals.length / 2)];
+  const cells = Object.keys(state.wheel?.cells || {}).filter((k) => k.startsWith(state.round + ':') && !state.used[k] && !state.dd[k]).length;
+  return `<div class="row" style="margin-top:12px">
+    <span class="hint">Na kole ${left} ${plural(left, 'pytanie', 'pytania', 'pytań')}, w tej rundzie ${cells} ${plural(cells, 'pole', 'pola', 'pól')} z kołem.</span>
+    <select class="field" id="wheel-val" style="max-width:110px">${vals.map((v) => `<option ${v === mid ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <button class="btn small" data-x="wheelExtra" title="Wybierający kręci kołem poza planszą, za wybraną stawkę">Dodatkowy obrót koła</button>
+  </div>`;
+}
+
+function mainWheel() {
+  const c = state.cur;
+  const w = c.wheel;
+  const nm = (id) => esc(E.nameOf(state, id));
+  const picker = state.picker;
+  const it = E.curQuestion(state);
+  const done = wheelPhaseDone();
+  const segs = w.segs.map((sg) => E.authorName(state, E.wheelPool(state).find((x) => x.id === sg.id))).map(esc).join(', ');
+  let body;
+  const acts = [];
+  if (!w.pick) {
+    body = `<div class="hint" style="font-size:16px">Kręci <b>${nm(picker)}</b> za <b>${c.value}</b>. Na kole ${w.segs.length} ${plural(w.segs.length, 'pytanie', 'pytania', 'pytań')}: ${segs}.</div>
+      <div class="hint">Wynik losuje panel, plansza u graczy pokazuje obrót. Pytanie zobaczą dopiero po „Pokaż pytanie”.</div>`;
+    acts.push(`<button class="btn primary" data-x="wheelSpin">Zakręć kołem <kbd>Enter</kbd></button>`);
+    acts.push(`<button class="btn ghost small" data-x="wheelCancel">${c.c == null ? 'Wróć do planszy' : 'Zagraj to pole jako zwykłe'}</button>`);
+  } else {
+    const author = esc(E.authorName(state, it));
+    let who;
+    if (w.own && !w.target) {
+      who = `<div class="wown">Własne pytanie! <b>${nm(picker)}</b> trafia na swoje. Wybiera osobę na telefonie albo mówi na głos:</div>
+        <div class="row">${state.players
+          .filter((p) => p.id !== picker)
+          .map((p) => `<button class="chip" data-wheel-pass="${esc(p.id)}">${esc(p.name)}</button>`)
+          .join('')}<button class="btn small" data-x="wheelDraw">Losuj osobę</button></div>`;
+    } else if (w.own) {
+      who = `<div class="wown">Własne pytanie ${nm(picker)}. ${w.passed === 'draw' ? 'Wylosowany' : 'Przekazane do'}: <b>${nm(w.target)}</b>${w.passed === 'draw' && !done ? ' (losowanie trwa na planszy)' : ''}.</div>`;
+    } else who = `<div class="hint" style="font-size:16px">Odpowiada <b>${nm(w.target)}</b>, sam, bez buzzerów.</div>`;
+    body = `<div class="hint" style="font-size:16px">${done || w.own ? '' : 'Koło się kręci… '}Pytanie od <b>${author}</b> za <b>${c.value}</b>.</div>
+      ${who}
+      <div class="hint">Podgląd dla Ciebie:</div>
+      ${qBlock(it)}`;
+    if (w.target) acts.push(`<button class="btn primary" data-x="wheelGo" ${done ? '' : 'disabled'}>Pokaż pytanie <kbd>Enter</kbd></button>`);
+  }
+  return `
+    <div class="sec-h"><h2 style="color:var(--amber)">Koło fortuny</h2><span class="label">${c.c == null ? 'dodatkowy obrót' : esc(E.roundOf(state).categories[c.c].name)} · kręci ${nm(picker)}</span></div>
+    <div class="qcard">
+      ${body}
+      <div class="actions">${acts.join('')}</div>
+    </div>`;
+}
+
+// premia dla autora, gdy odpowiadający poległ (prowadzący decyduje, czy pytanie było uczciwe)
+function bonusBlock() {
+  const c = state.cur;
+  const w = c?.wheel;
+  if (!w) return '';
+  const it = E.curQuestion(state);
+  const author = esc(E.authorName(state, it));
+  if (w.bonus) return `<div class="hint ok">${author} dostaje premię autora +${w.bonus.delta}.</div>`;
+  const r = c.result;
+  const id = E.authorPlayer(state);
+  if (!r || !['wrong', 'nobody'].includes(r.verdict) || !id || id === w.target) return `<div class="hint">Pytanie od ${author}.</div>`;
+  return `<div class="row"><button class="btn ok" data-x="wheelBonus">Premia dla autora: ${author} +${E.half(c.value)}</button><span class="hint">tylko gdy pytanie było uczciwe, a nie „co mam w kieszeni”</span></div>`;
+}
+
 function mainDD() {
   const { cat, q } = questionData();
   const max = E.ddMax(state);
@@ -800,21 +959,21 @@ function mainQuestion() {
   const { cat, q } = questionData();
   const c = state.cur;
   let st;
-  if (c.buzzed) st = `<span class="st buzz">${c.dd ? 'Odpowiada' : 'Zgłasza się'}: ${esc(E.nameOf(state, c.buzzed))}</span>`;
+  if (c.buzzed) st = `<span class="st buzz">${E.solo(c) ? 'Odpowiada' : 'Zgłasza się'}: ${esc(E.nameOf(state, c.buzzed))}</span>`;
   else if (c.buzzOpen) st = `<span class="st open">Buzzery otwarte</span>`;
   else st = `<span class="st closed">Buzzery zamknięte</span>`;
   const wrong = c.wrong.length ? `<span class="label">pudło: ${c.wrong.map((id) => esc(E.nameOf(state, id))).join(', ')}</span>` : '';
   const val = c.dd ? c.wager : c.value;
   const canJudge = !!c.buzzed;
   const acts = [];
-  if (!c.dd && !c.buzzed) acts.push(`<button class="btn primary" data-x="openBuzz" ${c.buzzOpen ? 'disabled' : ''}>Otwórz buzzery <kbd>Spacja</kbd></button>`);
-  if (c.dd && !c.buzzedAt) acts.push(`<button class="btn" data-x="startClock">Start zegara <kbd>Spacja</kbd></button>`);
+  if (!E.solo(c) && !c.buzzed) acts.push(`<button class="btn primary" data-x="openBuzz" ${c.buzzOpen ? 'disabled' : ''}>Otwórz buzzery <kbd>Spacja</kbd></button>`);
+  if (E.solo(c) && !c.buzzedAt) acts.push(`<button class="btn" data-x="startClock">Start zegara <kbd>Spacja</kbd></button>`);
   acts.push(`<button class="btn ok solid" data-x="right" ${canJudge ? '' : 'disabled'}>Dobrze +${val} <kbd>D</kbd></button>`);
   acts.push(`<button class="btn danger solid" data-x="wrong" ${canJudge ? '' : 'disabled'}>Źle −${val} <kbd>Z</kbd></button>`);
   acts.push(`<button class="btn ok" data-x="half" ${canJudge ? '' : 'disabled'}>Połowa <kbd>P</kbd></button>`);
   acts.push(`<button class="btn ghost" data-x="nobody">Nikt nie wie <kbd>N</kbd></button>`);
   return `
-    <div class="sec-h"><h2>${esc(cat.name)}</h2><span class="label">${c.dd ? 'wszystko albo nic' : 'pytanie'}</span></div>
+    <div class="sec-h"><h2>${esc(cat.name)}</h2><span class="label">${c.dd ? 'wszystko albo nic' : c.wheel ? `pytanie od ${esc(E.authorName(state, q))}` : 'pytanie'}</span></div>
     <div class="qcard">
       <div class="qmeta"><b class="${c.dd ? 'red' : ''}">${val}</b>${wrong}</div>
       ${qBlock(q)}
@@ -836,6 +995,7 @@ function mainReveal() {
     <div class="qcard">
       <div class="hint" style="font-size:16px"><b>${res}</b> Czas na złośliwy komentarz.</div>
       ${qBlock(q)}
+      ${bonusBlock()}
       <div class="actions"><button class="btn primary" data-x="next">Dalej <kbd>Enter</kbd></button></div>
       ${shameBox()}
     </div>`;
@@ -1083,6 +1243,7 @@ function renderMain() {
   else if (ph === 'round-intro') html = mainIntro();
   else if (ph === 'board') html = mainBoard();
   else if (ph === 'dd') html = mainDD();
+  else if (ph === 'wheel') html = mainWheel();
   else if (ph === 'question') html = mainQuestion();
   else if (ph === 'reveal') html = mainReveal();
   else if (ph.startsWith('final')) html = mainFinal();
@@ -1093,7 +1254,24 @@ function renderMain() {
   $main.innerHTML = html;
 }
 
+// koło kręci się na planszy kilka sekund: panel odświeża się, gdy wynik jest już widoczny dla graczy
+function wheelPhaseDone() {
+  const w = state?.cur?.wheel;
+  if (!w?.spinAt) return false;
+  const t = Date.now();
+  return t >= w.spinAt + E.SPIN_MS && (!w.drawAt || t >= w.drawAt + E.DRAW_MS);
+}
+function scheduleWheel() {
+  clearTimeout(wheelTimer);
+  const w = state?.phase === 'wheel' ? state.cur?.wheel : null;
+  if (!w?.spinAt) return;
+  const end = Math.max(w.spinAt + E.SPIN_MS, w.drawAt ? w.drawAt + E.DRAW_MS : 0);
+  const left = end - Date.now();
+  if (left > 0) wheelTimer = setTimeout(() => (renderMain(), renderPlayers()), left + 60);
+}
+
 function render() {
+  scheduleWheel();
   // zachowaj wpisywany tekst i fokus przy przerysowaniu
   const a = document.activeElement;
   const keep = a && a.id && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') ? { id: a.id, v: a.value, s: a.selectionStart, e: a.selectionEnd } : null;
@@ -1104,7 +1282,7 @@ function render() {
   renderPlayers();
   for (const [id, v] of Object.entries(vals)) {
     const el = document.getElementById(id);
-    if (el && !el.dataset.edit && id !== 'shame-text') el.value = v;
+    if (el && !el.dataset.edit && !el.dataset.wf && id !== 'shame-text') el.value = v;
   }
   if (keep) {
     const el = document.getElementById(keep.id);
@@ -1152,6 +1330,52 @@ const x = {
     if (!dispatch({ type: 'ddWager', amount: v })) toast(`Stawka musi być od ${E.DD_MIN} do ${E.ddMax(state)}`);
   },
   ddMax: () => dispatch({ type: 'ddWager', amount: E.ddMax(state) }),
+  wheelSpin: () => dispatch({ type: 'wheelSpin' }),
+  wheelDraw: () => dispatch({ type: 'wheelDraw' }),
+  wheelGo: () => dispatch({ type: 'wheelGo' }),
+  wheelCancel: () => dispatch({ type: 'wheelCancel' }),
+  wheelBonus: () => dispatch({ type: 'wheelBonus' }),
+  // Enter / Spacja na ekranie koła: zakręć, a gdy wiadomo, kto odpowiada, pokaż pytanie
+  wheelMain() {
+    const w = state.cur?.wheel;
+    if (!w) return;
+    if (!w.pick) return x.wheelSpin();
+    if (w.target && wheelPhaseDone()) return x.wheelGo();
+  },
+  wheelExtra() {
+    const v = document.getElementById('wheel-val')?.value;
+    if (!dispatch({ type: 'wheelExtra', value: v })) toast('Na kole nie ma już pytań');
+  },
+  wheelNew() {
+    wheelForm = 'new';
+    wheelDraft = { author: '', q: '', a: '', alt: '', note: '' };
+    wheelOpen = true;
+    render();
+    document.getElementById('wf-q')?.focus();
+  },
+  wheelCancelForm() {
+    wheelForm = null;
+    render();
+  },
+  wheelSave() {
+    const d = wheelDraft;
+    if (!d.q.trim() || !d.a.trim()) return toast('Potrzebne pytanie i odpowiedź');
+    const pl = state.players.find((p) => p.id === d.author);
+    const who = pl ? { authorId: pl.id, author: pl.name } : { authorId: null, author: d.author.trim() };
+    if (!who.author) return toast('Wybierz autora pytania');
+    const fields = { q: d.q, a: d.a, alt: d.alt, note: d.note, ...who };
+    const ok = wheelForm === 'new' ? dispatch({ type: 'wheelAdd', ...fields }, false) : dispatch({ type: 'wheelEdit', id: wheelForm, fields }, false);
+    if (!ok) return toast('Nie udało się zapisać pytania');
+    wheelForm = null;
+    render();
+    toast('Pytanie na kole zapisane');
+  },
+  wheelClear() {
+    if (wheelArmed !== 'clear') return armWheel('clear');
+    wheelArmed = null;
+    dispatch({ type: 'wheelClear' }, false);
+    toast('Koło wyczyszczone');
+  },
   finalWagers: () => dispatch({ type: 'finalWagers' }),
   finalQuestion: () => dispatch({ type: 'finalQuestion' }),
   finalReveal: () => dispatch({ type: 'finalReveal' }),
@@ -1245,7 +1469,22 @@ document.addEventListener('click', (e) => {
   else if (t.dataset.shameDel) dispatch({ type: 'shameDel', n: Number(t.dataset.shameDel) }, false);
   else if (t.dataset.punW) dispatch({ type: 'punish', winner: t.dataset.punW }, false);
   else if (t.dataset.punL) dispatch({ type: 'punish', loser: t.dataset.punL }, false);
-  else if (t.dataset.aliasDel) setSeason(S.removeAlias(season, t.dataset.aliasDel));
+  else if (t.dataset.wheelPass) dispatch({ type: 'wheelPass', id: t.dataset.wheelPass });
+  else if (t.dataset.wheelEdit) {
+    const it = E.wheelPool(state).find((q) => q.id === t.dataset.wheelEdit);
+    if (!it) return;
+    wheelForm = it.id;
+    wheelOpen = true;
+    const pl = state.players.find((p) => E.isAuthor(state, it, p.id));
+    wheelDraft = { author: pl ? pl.id : it.author, q: it.q, a: it.a, alt: (it.alt || []).join('; '), note: it.note || '' };
+    render();
+    document.getElementById('wf-q')?.focus();
+  } else if (t.dataset.wheelDel) {
+    const id = t.dataset.wheelDel;
+    if (wheelArmed !== id) return armWheel(id);
+    wheelArmed = null;
+    dispatch({ type: 'wheelDel', id }, false);
+  } else if (t.dataset.aliasDel) setSeason(S.removeAlias(season, t.dataset.aliasDel));
   else if (t.dataset.seasonDel) {
     const i = Number(t.dataset.seasonDel);
     if (armedDel !== i) {
@@ -1308,6 +1547,7 @@ document.addEventListener('keydown', (e) => {
     } else if (e.key === 'Escape') el.blur();
     else if (e.key === 'Enter') {
       if (el.id === 'ddw') x.ddWager();
+      else if (el.dataset.wf && el.tagName === 'INPUT') x.wheelSave();
       else if (el.id === 'newplayer') x.addPlayerOk();
       else if (el.id === 'shame-text') x.shameSave();
       else if (el.id === 'pun-nick') x.punNick();
@@ -1327,7 +1567,8 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k === ' ') {
     e.preventDefault();
-    if (ph === 'question') state.cur.dd ? x.startClock() : x.openBuzz();
+    if (ph === 'question') E.solo(state.cur) ? x.startClock() : x.openBuzz();
+    else if (ph === 'wheel') x.wheelMain();
     return;
   }
   if (k === 'enter') {
@@ -1335,8 +1576,9 @@ document.addEventListener('keydown', (e) => {
     if (document.activeElement?.tagName === 'BUTTON') document.activeElement.blur();
     if (ph === 'lobby') x.opener();
     else if (ph === 'opener') x.rules();
-    else if (ph === 'rules') state.rule < rulesFor(set).length - 1 ? x.ruleNext() : x.start();
+    else if (ph === 'rules') state.rule < E.rulesOf(state).length - 1 ? x.ruleNext() : x.start();
     else if (ph === 'round-intro' || ph === 'reveal') x.next();
+    else if (ph === 'wheel') x.wheelMain();
     else if (ph === 'final-intro') x.finalWagers();
     else if (ph === 'final-wager') x.finalQuestion();
     else if (ph === 'final-question') x.finalReveal();
@@ -1377,6 +1619,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener(
   'toggle',
   (e) => {
+    if (e.target.classList?.contains('wheel-box') && state.phase !== 'lobby') wheelOpen = e.target.open;
     if (e.target.classList?.contains('shame-box') && state.phase !== 'end') shameOpen = e.target.open;
   },
   true
@@ -1384,6 +1627,10 @@ document.addEventListener(
 
 document.addEventListener('input', (e) => {
   if (e.target.id === 'shame-text') shameDraft = e.target.value;
+  if (e.target.dataset?.wf) wheelDraft[e.target.dataset.wf] = e.target.value;
+});
+document.addEventListener('change', (e) => {
+  if (e.target.dataset?.wf) wheelDraft[e.target.dataset.wf] = e.target.value;
 });
 
 document.addEventListener(
@@ -1468,7 +1715,7 @@ async function applySet(parsed, name, extra = '') {
   store.set(LS.set, JSON.stringify(set));
   await checkMedia();
   if (state.phase === 'lobby') {
-    state = { ...state, set, title: set.title || state.title };
+    state = E.withSet(state, set);
     persist();
     render();
     broadcast();

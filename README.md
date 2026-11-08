@@ -19,6 +19,17 @@ Bez streamowania: każdy gracz widzi planszę u siebie, a obrazki i muzyka z pyt
 
 **Osobne okno planszy** (przycisk u góry) dalej istnieje, np. na drugi monitor albo gdyby ktoś jednak chciał streamować. Wtedy wyłącz dźwięk w podglądzie, żeby muzyka nie grała podwójnie.
 
+## Koło fortuny: pytania od graczy
+
+1. **Gracze piszą pytania sami**: w poczekalni pod buzzerem każdy ma „Dodaj pytanie na koło” (po 2 na osobę, pytanie, odpowiedź, opcjonalnie inne dobre odpowiedzi). Może je poprawić albo usunąć, dopóki nie padły. Widzi je tylko prowadzący.
+2. **Prowadzący przegląda** listę w poczekalni (panel „Koło fortuny”): widzi, kto ile wysłał, może poprawić, usunąć pytanie z czapy albo dopisać pytanie za kogoś (np. przysłane na Discordzie).
+3. **Na planszy** przy starcie losują się ukryte pola z kołem (jak „wszystko albo nic”, nigdy w najtańszym rzędzie). Domyślnie pytania graczy rozkładają się po równo na rundy; w panelu pole ma znaczek **KOŁO**. Gdy po rundach zostaną pytania, pod planszą jest **Dodatkowy obrót koła** za wybraną stawkę.
+4. **Kręcenie**: kto trafi na pole, kręci (`Enter` w panelu). Koło kręci się u wszystkich na urządzeniach, segmenty pokazują autorów pytań. Pytanie widzi tylko prowadzący, gracze dopiero po **Pokaż pytanie**.
+5. **Własne pytanie**: gdy koło wskaże pytanie wybierającego, ten na telefonie wybiera, komu je oddać, albo klika **Losuj osobę** (losowanie widać na planszy). Prowadzący może to samo kliknąć w panelu.
+6. **Punkty**: odpowiada jedna osoba, bez buzzerów (zegar jak przy „wszystko albo nic”, `Spacja`). Dobrze: wartość pola, źle: tyle samo na minus. Gdy ktoś poległ albo nikt nie wiedział, panel proponuje **Premię dla autora** (połowa stawki); klikasz tylko, jeśli pytanie było uczciwe.
+
+Pytania na koło zostają przy „Nowa gra” (wylosowane wracają na koło); **Wyczyść koło** usuwa wszystkie. W pliku z pytaniami można też dać gotowe pytania (`wheel`) i liczbę pól z kołem na rundę (`wheelFields`), patrz niżej.
+
 ## Po odcinku: Hall of Shame, kara, ranking sezonu
 
 - **Hall of Shame**: w trakcie pytania, odpowiedzi albo odsłaniania finału klawisz `H` (albo kliknięcie w pole „Hall of Shame”) otwiera wpis. Gracz jest podpowiedziany (ten, kto właśnie odpowiadał), wpisujesz, co powiedział, `Enter` zapisuje. Po odcinku wybierasz, która odpowiedź idzie na slajd, reszta pokazuje się jako nominacje.
@@ -39,7 +50,7 @@ Awatar każdego gracza przy nicku na planszy, podświetlany i z otwartymi ustami
 
 `edytor.html` (na stronie głównej „Układam pytania”, w panelu przycisk **Edytor pytań**) to edytor zestawu w przeglądarce, dla każdego, kto chce zagrać swoimi pytaniami:
 
-- rundy (do 4) z nazwą, stawkami i liczbą pól „wszystko albo nic”, kategorie (do 8) i wiersze (do 10) dodawane i usuwane jak na planszy,
+- rundy (do 4) z nazwą, stawkami, liczbą pól „wszystko albo nic” i pól z kołem fortuny, kategorie (do 8) i wiersze (do 10) dodawane i usuwane jak na planszy,
 - pytanie: treść, odpowiedź, inne dobre odpowiedzi, ciekawostka dla prowadzącego, opcjonalnie obrazek z pytaniem, obrazek po odpowiedzi i klip audio (link `https://…` albo ścieżka `media/plik.jpg` do wczytania folderem w panelu), z podglądem,
 - finał (opcjonalnie), nazwa na logo planszy, podpis w czołówce, numer odcinka,
 - lista braków („Gotowość”), kliknięcie przenosi do pola,
@@ -61,6 +72,7 @@ Pytanie: `q` (treść), `a` (odpowiedź), opcjonalnie `alt` (inne akceptowane od
 
 Odcinek: `episode` (numer w czołówce; bez tego pola brany z nazwy pliku `odcinek-2.json`) i `subtitle` (podpis pod logo). Własne zasady: `rules` jako lista `{ "title", "board": [krótkie linijki na planszę], "host": "tekst do przeczytania" }`; bez tego pola panel układa zasady sam na podstawie zestawu (rundy, stawki, pola „wszystko albo nic”, finał, czy są media).
 Finał: `category`, `q`, `a`. Liczba pól „wszystko albo nic” na rundę: `dailyDoubles` (domyślnie 1 i 2).
+Koło fortuny: `wheel` to lista `{ "author", "q", "a", "alt", "note" }` (mogą też mieć media jak zwykłe pytania), a `wheelFields` w rundzie ustala liczbę pól z kołem (bez tego pola: pytania graczy po równo na rundy). Pytania, które gracze wpiszą na telefonach, nie trafiają do pliku, leżą w stanie gry u prowadzącego.
 
 Prawdziwych pytań nie wrzucamy do repo (`pytania/*.json` poza przykładem jest w `.gitignore`).
 

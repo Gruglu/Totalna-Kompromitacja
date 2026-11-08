@@ -1,7 +1,7 @@
 // Zasady czytane przed pierwszą rundą. Każda zasada ma krótką wersję na planszę
 // ("board") i pełny tekst dla prowadzącego ("host"), który czyta się na głos.
 // Zestaw pytań może podać własne "rules" w tym samym kształcie i wtedy zastępują te.
-import { ANSWER_SECONDS, FINAL_SECONDS, DD_MIN, DD_PER_ROUND, PUNISH_DAYS, mediaRefs } from './engine.js';
+import { ANSWER_SECONDS, FINAL_SECONDS, DD_MIN, DD_PER_ROUND, PUNISH_DAYS, WHEEL_PER_PLAYER, mediaRefs } from './engine.js';
 
 const plural = (n, one, few, many) => {
   if (n === 1) return one;
@@ -10,12 +10,12 @@ const plural = (n, one, few, many) => {
   return d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? few : many;
 };
 
-export function rulesFor(set) {
+export function rulesFor(set, wheelCount = 0) {
   if (Array.isArray(set?.rules) && set.rules.length) return set.rules;
-  return defaultRules(set);
+  return defaultRules(set, wheelCount);
 }
 
-export function defaultRules(set) {
+export function defaultRules(set, wheelCount = 0) {
   const rounds = set?.rounds || [];
   const R = rounds.length;
   const r1 = rounds[0];
@@ -68,6 +68,15 @@ export function defaultRules(set) {
     board: [`ukryte pola: ${dd.map((n, i) => `${n} w R${i + 1}`).join(', ')}`, 'gra tylko ten, kto je wybrał', `stawka od ${DD_MIN} do całego wyniku`],
     host: `Na planszy są ukryte pola „wszystko albo nic”: ${ddTxt}. Kto na nie trafi, gra sam. Najpierw stawia, od ${DD_MIN} punktów do całego swojego wyniku, a jak ma mało, to do najwyższej stawki na planszy. Potem dopiero widzi pytanie. Stawkę wpisujecie na telefonie albo mówicie mi na głos. Odwaga jest opcjonalna, wstyd obowiązkowy.`,
   });
+
+  const wheelOn = wheelCount > 0 || (Array.isArray(set?.wheel) && set.wheel.length) || rounds.some((r) => Number(r.wheelFields) > 0);
+  if (wheelOn) {
+    list.push({
+      title: 'Koło fortuny',
+      board: ['ukryte pola z kołem: na kole Wasze własne pytania', 'trafisz na swoje: przekazujesz komuś albo losujemy', 'odpowiada jedna osoba: dobrze plus, źle minus', 'autor zagiął? może dostać połowę stawki'],
+      host: `Na planszy są też ukryte pola z kołem fortuny. Na kole siedzą pytania, które sami wymyśliliście, po ${WHEEL_PER_PLAYER} od głowy. Kto trafi na takie pole, kręci. Na segmentach widać, czyje to pytanie. Jak koło wskaże Twoje własne, nie odpowiadasz sam sobie: przekazujesz je wybranej osobie albo zdajesz się na losowanie. Odpowiada jedna osoba, bez buzzerów: dobrze, dostaje wartość pola, źle, tyle samo idzie na minus. A jeśli autor naprawdę kogoś zagiął, dostaje połowę stawki. Pod warunkiem, że pytanie było uczciwe. Pytania w stylu „co mam w kieszeni” dostają ode mnie zero i publiczne upokorzenie.`,
+    });
+  }
 
   if (hasImg || hasAudio) {
     const b = [];

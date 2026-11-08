@@ -121,3 +121,17 @@ body:has(.join) { overflow: auto; }
 .pair-box h2 { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 30px; text-transform: uppercase; color: var(--amber); }
 .pair-box .pair-qr svg { width: 100%; height: auto; display: block; }
 .pair-box p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--hot); }
+
+/* pytania na koło w poczekalni i przekazywanie własnego pytania */
+.pad-center.wide { overflow: auto; }
+.portrait.with-board .pad-center.wide { height: auto; max-height: 40dvh; }
+.wq-list { gap: 8px; }
+.wq-list .label { font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); }
+.wq-item { border: 1px solid var(--line); background: var(--cell); padding: 8px 10px; display: grid; gap: 4px; }
+.wq-t { font-family: var(--f-crt); font-size: 19px; line-height: 1.05; color: var(--hot); }
+.wq-s { font-family: var(--f-mono); font-size: 12px; color: var(--amber-dim); }
+.wq-b { display: flex; gap: 6px; }
+.wq-b .btn { font-size: 13px; padding: 5px 10px; }
+.wpass { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.wpass .btn { font-size: 20px; }
+.wpass .btn.primary { grid-column: 1 / -1; }

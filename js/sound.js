@@ -110,6 +110,32 @@ const SOUNDS = {
   tick() {
     tone(1200, 0, 0.03, { gain: 0.06 });
   },
+  // koło fortuny
+  wheel() {
+    const seq = [262, 330, 392, 523, 392, 523, 659, 784];
+    seq.forEach((f, i) => tone(f, i * 0.07, 0.12, { type: 'square', gain: 0.12 }));
+    tone(1047, 0.56, 0.5, { type: 'triangle', gain: 0.2 });
+    noise(0.56, 0.3, 0.08, 2000);
+  },
+  spin() {
+    noise(0, 0.6, 0.14, 600);
+    tone(120, 0, 0.6, { type: 'sawtooth', gain: 0.12, slide: 480 });
+  },
+  click() {
+    tone(2400, 0, 0.018, { gain: 0.07 });
+    noise(0, 0.012, 0.05, 5000);
+  },
+  land() {
+    tone(150, 0, 0.25, { type: 'sine', gain: 0.4, slide: 50 });
+    [659, 784, 1047].forEach((f, i) => tone(f, 0.05 + i * 0.06, 0.2, { type: 'triangle', gain: 0.2 }));
+  },
+  pass() {
+    tone(784, 0, 0.08, { gain: 0.12 });
+    tone(523, 0.08, 0.16, { gain: 0.12 });
+  },
+  draw() {
+    noise(0, 0.2, 0.06, 1500);
+  },
   rule() {
     tone(660, 0, 0.05, { gain: 0.1 });
     tone(990, 0.05, 0.09, { gain: 0.1 });

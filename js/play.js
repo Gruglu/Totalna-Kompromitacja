@@ -48,6 +48,9 @@ let lockUntil = 0;
 let pressedAt = 0;
 let sentWager = null;
 let draft = '';
+let wq = null; // formularz pytania na koło: null | { id|null, q, a, alt }
+let wqArmed = null; // id pytania do usunięcia (drugie dotknięcie)
+let wheelTimer = null;
 let mediaList = null; // { ver, items } od prowadzącego
 let showBoard = mode !== 'buzzer' && ls.get('pk.board') !== '0';
 
@@ -268,7 +271,7 @@ function buzz() {
     link?.send({ t: 'buzz' });
     navigator.vibrate?.(30);
     renderPad();
-  } else if (!view.buzzed && !view.tried && !view.dd) {
+  } else if (!view.buzzed && !view.tried && !view.solo) {
     lockUntil = t + EARLY_LOCK_MS;
     navigator.vibrate?.(200);
     renderPad();
@@ -296,7 +299,15 @@ function body() {
   const v = view;
   const ph = v.phase;
   if (!v.me) return { info: ['Łączenie…', ''], center: '' };
-  if (ph === 'lobby') return { info: ['Jesteś w grze', 'czekamy na start'], center: `<button class="buzzer" id="buzz" disabled>Rozgrzewka<small>tu będzie Twój buzzer</small></button>` };
+  if (ph === 'lobby') {
+    const mine = v.wheelMine || [];
+    if (wq) return { info: ['Pytanie na koło', 'widzi je tylko prowadzący'], center: wheelForm(), wide: true };
+    return {
+      info: ['Jesteś w grze', mine.length < v.wheelMax ? `wyślij ${v.wheelMax - mine.length} ${v.wheelMax - mine.length === 1 ? 'pytanie' : 'pytania'} na koło` : 'czekamy na start'],
+      center: wheelList(mine, v.wheelMax),
+      wide: true,
+    };
+  }
   if (ph === 'opener') return { info: ['Zaraz zaczynamy', LOOK()], center: `<button class="buzzer" id="buzz" disabled>Czołówka<small>jeszcze możesz uciec</small></button>` };
   if (ph === 'rules') return { info: ['Zasady', 'słuchaj, potem nie płacz'], center: `<button class="buzzer" id="buzz" disabled>Zasady<small>buzzer ruszy w pierwszej rundzie</small></button>` };
   if (ph === 'round-intro') return { info: ['Nowa runda', `zaczyna ${v.pickerName}`], center: `<button class="buzzer" id="buzz">Czekaj<small>za chwilę plansza</small></button>` };
@@ -317,7 +328,32 @@ function body() {
     }
     return { info: ['Wszystko albo nic', `${v.pickerName} gra sam`], center: `<button class="buzzer locked" id="buzz">Patrz<small>to nie Twoja tura</small></button>` };
   }
+  if (ph === 'wheel' && v.wheel) {
+    const w = v.wheel;
+    const landed = w.spun && w.landIn === 0 ? true : w.spun && Date.now() - viewAt >= (w.landIn ?? 0);
+    if (!w.spun) return { info: ['Koło fortuny', v.picker ? `kręcisz za ${v.value}` : `kręci ${v.pickerName}`], center: `<button class="buzzer locked" id="buzz">Koło<small>${v.picker ? 'powiedz „kręcę”, prowadzący zakręci' : 'patrz na planszę'}</small></button>` };
+    if (!landed) return { info: ['Koło fortuny', 'kręci się…'], center: `<button class="buzzer locked" id="buzz">Kręci się<small>trzymaj kciuki</small></button>` };
+    const drawn = !w.drawIn || Date.now() - viewAt >= w.drawIn;
+    if (w.mineOwn && !w.target) {
+      return {
+        info: ['Twoje własne pytanie', 'komu je oddajesz?'],
+        center: `<div class="form wpass">${w.others.map((p) => `<button class="btn" data-wpass="${esc(p.id)}">${esc(p.name)}</button>`).join('')}<button class="btn primary" data-wpass="">Losuj osobę</button></div>`,
+        wide: true,
+      };
+    }
+    if (w.target && drawn) {
+      return w.target.me
+        ? { info: [`Pytanie od ${w.author}`, `za ${v.value}`], center: `<button class="buzzer mine" id="buzz">Odpowiadasz<small>grasz sam, bez buzzera</small></button>` }
+        : { info: [`Pytanie od ${w.author}`, `za ${v.value}`], center: `<button class="buzzer locked" id="buzz">${esc(w.target.name)}<small>odpowiada</small></button>` };
+    }
+    return { info: [`Pytanie od ${w.author}`, w.own ? `własne pytanie ${v.pickerName}` : `za ${v.value}`], center: `<button class="buzzer locked" id="buzz">${w.drawIn ? 'Losujemy' : 'Czekaj'}<small>patrz na planszę</small></button>` };
+  }
   if (ph === 'question') {
+    if (v.wheel) {
+      return v.buzzed?.me
+        ? { info: [`Koło · ${v.value}`, `pytanie od ${v.wheel.author}`], center: `<button class="buzzer mine" id="buzz">Odpowiadasz<small>za ${v.value}</small></button>` }
+        : { info: [`Koło · ${v.value}`, `odpowiada ${v.buzzed?.name || ''}`], center: `<button class="buzzer locked" id="buzz">Patrz<small>to nie Twoja tura</small></button>` };
+    }
     if (v.dd) {
       return v.buzzed?.me
         ? { info: [`${v.category} · ${v.value}`, 'wszystko albo nic'], center: `<button class="buzzer mine" id="buzz">Odpowiadasz<small>stawka ${v.value}</small></button>` }
@@ -400,13 +436,13 @@ function renderPad() {
   }
   // nie przerywaj pisania w polu tekstowym
   const a = document.activeElement;
-  const typing = a && (a.id === 'fans' || a.id === 'wager' || a.id === 'fwager') ? { id: a.id, v: a.value } : null;
+  const typing = a && ['fans', 'wager', 'fwager', 'wq-q', 'wq-a', 'wq-alt'].includes(a.id) ? { id: a.id, v: a.value } : null;
   if (a?.id === 'fans') draft = a.value;
   const b = body();
   const me = view.me;
   $pad.innerHTML = `<div class="strip"><div class="logo">TK</div><div class="me"><span class="nm">${esc(me?.name || name)}</span><span class="sc${me && me.score < 0 ? ' neg' : ''}">${me ? me.score : ''}</span></div></div>
     <div class="info"><div class="big">${esc(b.info[0])}</div><div class="small">${esc(b.info[1])}</div></div>
-    <div class="pad-center">${b.center}</div>
+    <div class="pad-center${b.wide ? ' wide' : ''}">${b.center}</div>
     ${footHTML()}`;
   const fans = document.getElementById('fans');
   if (fans && draft) fans.value = draft;
@@ -418,6 +454,42 @@ function renderPad() {
     }
   }
   bind();
+  // koło na planszy kręci się kilka sekund: odśwież przyciski, gdy wynik jest już widać
+  clearTimeout(wheelTimer);
+  const w = view.phase === 'wheel' ? view.wheel : null;
+  if (w) {
+    const left = Math.max(w.landIn ?? 0, w.drawIn ?? 0) - (Date.now() - viewAt);
+    if (left > 0) wheelTimer = setTimeout(renderPad, left + 80);
+  }
+}
+
+// ---------- pytania na koło (poczekalnia) ----------
+
+function wheelList(mine, max) {
+  const rows = mine
+    .map(
+      (x) => `<div class="wq-item"><div class="wq-t">${esc(x.q)}</div><div class="wq-s">odp. ${esc(x.a)}</div>
+      ${x.used ? '<span class="wq-s">już było</span>' : `<div class="wq-b"><button class="btn small ghost" data-wqedit="${esc(x.id)}">Popraw</button><button class="btn small danger ${wqArmed === x.id ? 'solid' : 'ghost'}" data-wqdel="${esc(x.id)}">${wqArmed === x.id ? 'Na pewno?' : 'Usuń'}</button></div>`}</div>`
+    )
+    .join('');
+  const can = mine.length < max;
+  return `<div class="form wq-list">
+    <span class="label">Twoje pytania na koło fortuny · ${mine.length}/${max}</span>
+    ${rows}
+    ${can ? `<button class="btn primary" data-wqnew="1">${mine.length ? 'Dodaj drugie pytanie' : 'Dodaj pytanie na koło'}</button>` : ''}
+    <div class="hint">Wymyśl pytanie, na które inni <b>mają szansę</b> odpowiedzieć. Widzi je tylko prowadzący. Jak ktoś poległ, a pytanie było uczciwe, dostajesz połowę stawki. „Co mam w kieszeni” się nie liczy.</div>
+  </div>`;
+}
+
+function wheelForm() {
+  return `<form class="form" id="wqf">
+    <span class="label">${wq.id ? 'Popraw pytanie' : 'Nowe pytanie na koło'}</span>
+    <textarea class="field" id="wq-q" maxlength="400" placeholder="Pytanie">${esc(wq.q)}</textarea>
+    <input class="field" id="wq-a" maxlength="200" placeholder="Odpowiedź" value="${esc(wq.a)}">
+    <input class="field" id="wq-alt" maxlength="300" placeholder="Inne dobre odpowiedzi (opcjonalnie, po średniku)" value="${esc(wq.alt)}">
+    <button class="btn primary">Wyślij do prowadzącego</button>
+    <button class="btn ghost" type="button" data-wqcancel="1">Anuluj</button>
+  </form>`;
 }
 
 function bind() {
@@ -454,6 +526,50 @@ function bind() {
       document.getElementById('fwager').value = '';
       document.activeElement?.blur();
     });
+  const qf = document.getElementById('wqf');
+  if (qf) {
+    qf.addEventListener('input', (e) => {
+      const k = { 'wq-q': 'q', 'wq-a': 'a', 'wq-alt': 'alt' }[e.target.id];
+      if (k) wq[k] = e.target.value;
+    });
+    qf.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!wq.q.trim()) return flash('wq-q');
+      if (!wq.a.trim()) return flash('wq-a');
+      link.send({ t: 'wheelQ', id: wq.id, q: wq.q.trim(), a: wq.a.trim(), alt: wq.alt.trim() });
+      wq = null;
+      document.activeElement?.blur();
+      renderPad();
+    });
+  }
+  document.querySelectorAll('#pad [data-wqnew], #pad [data-wqcancel], #pad [data-wqedit], #pad [data-wqdel], #pad [data-wpass]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const d = b.dataset;
+      if (d.wqnew) wq = { id: null, q: '', a: '', alt: '' };
+      else if (d.wqcancel) wq = null;
+      else if (d.wqedit) {
+        const x = (view.wheelMine || []).find((y) => y.id === d.wqedit);
+        if (x) wq = { id: x.id, q: x.q, a: x.a, alt: x.alt || '' };
+      } else if (d.wqdel) {
+        if (wqArmed !== d.wqdel) {
+          wqArmed = d.wqdel;
+          setTimeout(() => {
+            wqArmed = null;
+            renderPad();
+          }, 3000);
+        } else {
+          wqArmed = null;
+          link.send({ t: 'wheelDel', id: d.wqdel });
+        }
+      } else if (d.wpass != null) {
+        link.send(d.wpass ? { t: 'wheelPass', id: d.wpass } : { t: 'wheelPass', random: true });
+        b.disabled = true;
+        return;
+      }
+      renderPad();
+      if (wq) document.getElementById('wq-q')?.focus();
+    })
+  );
   const fa = document.getElementById('fansf');
   if (fa)
     fa.addEventListener('submit', (e) => {
