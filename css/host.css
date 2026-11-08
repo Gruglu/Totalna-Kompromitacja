@@ -17,16 +17,22 @@ body[data-pv='s'] .layout { --side: 380px; }
 body[data-pv='l'] .layout { --side: min(60vw, 1000px); }
 @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
 .col { padding: 18px max(16px, env(safe-area-inset-left, 0px)) 24px; min-width: 0; }
-.side { border-left: 1px solid var(--line); background: #0e0a05; display: grid; align-content: start; gap: 18px; }
-@media (max-width: 1000px) { .side { border-left: 0; border-top: 1px solid var(--line); } }
+/* Prawa kolumna stoi w miejscu pod paskiem: podgląd na górze, lista graczy przewija się pod nim we własnym polu,
+   więc nic nie wjeżdża pod podgląd. Wysokość paska mierzy host.js (--top-h). */
+.side { border-left: 1px solid var(--line); background: #0e0a05; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 18px;
+  position: sticky; top: var(--top-h, 64px); height: calc(100vh - var(--top-h, 64px)); align-self: start; }
+.side > #players { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; border-top: 1px solid var(--line); padding-top: 12px; }
+@media (max-width: 1000px) {
+  .side { border-left: 0; border-top: 1px solid var(--line); position: static; height: auto; }
+  .side > #players { overflow: visible; border-top: 0; padding-top: 0; }
+}
 
 .sec-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-bottom: 2px solid var(--amber); padding-bottom: 6px; margin-bottom: 12px; }
 .sec-h h2 { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 26px; text-transform: uppercase; color: var(--amber); letter-spacing: 0.01em; }
 .sec-h .label { white-space: nowrap; }
 
-.pv-wrap { position: sticky; top: 74px; z-index: 5; background: #0e0a05; padding-bottom: 6px; display: grid; gap: 8px; }
+.pv-wrap { display: grid; gap: 8px; }
 .pv-wrap .sec-h { margin-bottom: 0; }
-@media (max-width: 1000px) { .pv-wrap { position: static; } }
 .pv-tools .btn { font-size: 12px; padding: 4px 8px; }
 .preview { position: relative; aspect-ratio: 16 / 9; border: 1px solid var(--line); background: #000; overflow: hidden; }
 body.pv-phone .preview { aspect-ratio: 390 / 480; max-width: 390px; }
