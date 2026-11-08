@@ -102,3 +102,14 @@ export function resetCache() {
 
 const MEDIA_EXT = /\.(jpe?g|png|webp|gif|avif|svg|mp3|ogg|oga|opus|m4a|aac|wav|flac|webm)$/i;
 export const isMediaFile = (name) => MEDIA_EXT.test(name);
+
+// Dla telefonów graczy: plik z bazy prowadzącego albo adres pliku leżącego na stronie.
+export async function source(src) {
+  if (isExternal(src)) return { url: src };
+  let b = null;
+  try {
+    b = await getBlob(src);
+  } catch {}
+  if (b) return { blob: b };
+  return (await onSite(src)) ? { url: src } : null;
+}

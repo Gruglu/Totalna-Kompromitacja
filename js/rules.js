@@ -1,4 +1,4 @@
-// Zasady czytane przed pierwszą rundą. Każda zasada ma krótką wersję na stream
+// Zasady czytane przed pierwszą rundą. Każda zasada ma krótką wersję na planszę
 // ("board") i pełny tekst dla prowadzącego ("host"), który czyta się na głos.
 // Zestaw pytań może podać własne "rules" w tym samym kształcie i wtedy zastępują te.
 import { ANSWER_SECONDS, FINAL_SECONDS, DD_MIN, DD_PER_ROUND, PUNISH_DAYS, mediaRefs } from './engine.js';
@@ -71,12 +71,12 @@ export function defaultRules(set) {
 
   if (hasImg || hasAudio) {
     const b = [];
-    if (hasImg) b.push('obrazek pojawia się razem z pytaniem');
+    if (hasImg) b.push('obrazek pojawia się razem z pytaniem, dotknij, żeby powiększyć');
     if (hasAudio) b.push('muzykę puszczam ja, możecie zgłaszać się w trakcie');
     b.push('buzzery otwieram jak zwykle, gdy skończę czytać');
     const h = [];
-    if (hasImg) h.push('Niektóre pytania mają obrazek, pokaże się na streamie razem z treścią.');
-    if (hasAudio) h.push('W niektórych puszczam fragment muzyki. Steruję tym ja, więc jak coś nie gra, to wina Discorda, nie moja. Jak tylko otworzę buzzery, możecie się zgłaszać, nawet jeśli muzyka jeszcze leci.');
+    if (hasImg) h.push('Niektóre pytania mają obrazek, pokaże się u Was na ekranie razem z treścią. Na telefonie dotknij go, żeby powiększyć.');
+    if (hasAudio) h.push('W niektórych puszczam fragment muzyki. Gra u Was na urządzeniach, steruję tym ja, więc jak nic nie słychać, to sprawdźcie głośność, a nie mnie. Jak tylko otworzę buzzery, możecie się zgłaszać, nawet jeśli muzyka jeszcze leci.');
     h.push('Zasady punktowania są te same.');
     list.push({ title: hasAudio ? 'Obrazki i muzyka' : 'Obrazki', board: b, host: h.join(' ') });
   }

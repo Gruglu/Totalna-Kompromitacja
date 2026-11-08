@@ -10,16 +10,17 @@
 <link rel="stylesheet" href="css/theme.css">
 <link rel="stylesheet" href="css/host.css">
 </head>
-<body>
+<body data-pv="m">
 <header class="top" id="top"></header>
 <div class="layout">
   <main class="col" id="main"></main>
   <aside class="col side">
-    <div id="players"></div>
-    <div>
-      <div class="sec-h"><h2>Na streamie</h2><span class="label">podgląd</span></div>
-      <div class="preview"><iframe src="board.html?preview" title="Podgląd streamu" tabindex="-1"></iframe></div>
+    <div class="pv-wrap">
+      <div class="sec-h"><h2>Co widzą gracze</h2><span class="label">na żywo</span></div>
+      <div class="preview"><iframe id="pv" src="board.html?preview" title="Plansza u graczy" tabindex="-1"></iframe></div>
+      <div class="row pv-tools" id="pv-tools"></div>
     </div>
+    <div id="players"></div>
   </aside>
 </div>
 <input type="file" id="file" accept=".json,application/json,image/*,audio/*" multiple hidden>
