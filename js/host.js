@@ -136,6 +136,7 @@ async function boot() {
   checkMedia();
   render();
   broadcast();
+  takeIncoming();
 }
 
 function startRoom() {
@@ -380,6 +381,11 @@ const actions = {
   loadDir() {
     document.getElementById('dir').click();
   },
+  openEditor() {
+    // osobna karta, żeby pokój z graczami nie zniknął
+    const w = window.open('edytor.html', 'tk-edytor');
+    if (!w) location.href = 'edytor.html';
+  },
   undo,
   newGame() {
     if (!armedNew) {
@@ -470,6 +476,7 @@ function renderTop() {
       <button class="btn" data-a="openStream" title="Opcjonalne: plansza w osobnym oknie, np. na drugi monitor">Osobne okno planszy</button>
       <button class="btn" data-a="loadDir" title="Folder z plikiem JSON i podfolderem media">Wczytaj folder</button>
       <button class="btn" data-a="loadSet" title="Plik JSON, można zaznaczyć razem z plikami mediów">Wczytaj pliki</button>
+      <button class="btn" data-a="openEditor" title="Ułóż własny zestaw pytań w przeglądarce, bez pisania JSON-a">Edytor pytań</button>
       <button class="btn" data-a="undo" ${history.length ? '' : 'disabled'}>Cofnij <kbd>Ctrl+Z</kbd></button>
       <button class="btn${armedNew ? ' armed' : ''}" data-a="newGame">${armedNew ? 'Na pewno? Kliknij znowu' : 'Nowa gra'}</button>
     </div>`;
@@ -548,7 +555,7 @@ function mainLobby() {
       <div class="panel">
         <span class="label">Pytania</span>
         <div><b style="font-family:var(--f-display);font-size:22px;text-transform:uppercase;color:var(--amber)">${esc(set.title || 'Bez tytułu')}</b></div>
-        <div class="hint">${counts} pytań${set.final ? ' + finał' : ''}${set.episode != null ? ` · odcinek ${esc(set.episode)}` : ''}. ${set.example ? '<b>To przykładowy zestaw testowy.</b> Wczytaj swój folder z pytaniami przyciskiem u góry.' : 'Zestaw zapisany w tej przeglądarce, nie leży w internecie.'}</div>
+        <div class="hint">${counts} pytań${set.final ? ' + finał' : ''}${set.episode != null ? ` · odcinek ${esc(set.episode)}` : ''}. ${set.example ? '<b>To przykładowy zestaw testowy.</b> Wczytaj swój folder z pytaniami przyciskiem u góry albo ułóż własne pytania w <b>Edytorze pytań</b>.' : 'Zestaw zapisany w tej przeglądarce, nie leży w internecie.'}</div>
         ${mediaInfo()}
         ${err}
       </div>
@@ -1451,22 +1458,49 @@ async function useLoad(j, med) {
     const dir = j.path.includes('/') ? j.path.slice(0, j.path.lastIndexOf('/') + 1) : '';
     await storeMedia(med, dir);
   }
+  applySet(parsed, parsed.title || j.path, med.length ? ` + ${med.length} mediów` : '');
+}
+
+async function applySet(parsed, name, extra = '') {
   set = parsed;
   store.set(LS.set, JSON.stringify(set));
   await checkMedia();
-  const name = set.title || j.path;
   if (state.phase === 'lobby') {
     state = { ...state, set, title: set.title || state.title };
     persist();
     render();
     broadcast();
-    toast(`Wczytano: ${name}${med.length ? ` + ${med.length} mediów` : ''}`);
+    toast(`Wczytano: ${name}${extra}`);
   } else {
     render();
     broadcast();
     toast('Wczytano. Nowy zestaw zadziała po „Nowa gra”.');
   }
 }
+
+// zestaw z edytora pytań (edytor.html): przychodzi przez localStorage, także gdy panel jest już otwarty
+const INCOMING = 'pk.incoming';
+function takeIncoming() {
+  const raw = store.get(INCOMING);
+  if (!raw) return;
+  store.del(INCOMING);
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw).set;
+  } catch {}
+  const errs = E.validateSet(parsed);
+  if (errs.length) {
+    setErrors = errs.slice(0, 12);
+    toast('Zestaw z edytora ma błędy, szczegóły w poczekalni');
+    return render();
+  }
+  setErrors = [];
+  pendingLoad = null;
+  applySet(parsed, `${parsed.title || 'zestaw'} z edytora`);
+}
+window.addEventListener('storage', (e) => {
+  if (e.key === INCOMING && e.newValue && state) takeIncoming();
+});
 
 async function checkMedia() {
   const refs = E.mediaRefs(set);
