@@ -93,6 +93,7 @@ function clean(src) {
   s.rounds = s.rounds.map((r) => {
     const o = { ...r, name: r.name.trim() || 'Runda', categories: r.categories.map((c) => ({ ...c, name: c.name.trim(), questions: c.questions.map(cleanQ) })) };
     if (o.dailyDoubles == null) delete o.dailyDoubles;
+    if (o.wheelFields == null) delete o.wheelFields;
     return o;
   });
   if (s.final) s.final = cleanQ(s.final);
@@ -420,6 +421,10 @@ function renderMain() {
       <label><span class="label">Nazwa rundy</span><input class="field" data-rn value="${esc(r.name)}" maxlength="30" style="width:200px"></label>
       <label><span class="label">Pola „wszystko albo nic”</span>
         <select class="field" data-dd style="width:auto"><option value="" ${r.dailyDoubles == null ? 'selected' : ''}>domyślnie (${ddAuto})</option>${ddOpts}</select></label>
+      <label title="Koło fortuny: ukryte pola, na których wybierający kręci kołem z pytaniami od graczy (gracze wpisują je na telefonach w poczekalni)"><span class="label">Pola z kołem</span>
+        <select class="field" data-wheel style="width:auto"><option value="" ${r.wheelFields == null ? 'selected' : ''}>auto (pytania graczy po równo)</option>${[0, 1, 2, 3, 4, 5, 6]
+          .map((n) => `<option value="${n}" ${r.wheelFields === n ? 'selected' : ''}>${n}</option>`)
+          .join('')}</select></label>
       <div class="row" style="margin-left:auto">
         <button class="btn small ghost" data-a="doubleValues" title="Wszystkie stawki razy dwa">Stawki ×2</button>
         <button class="btn small danger ghost" data-a="delRound" ${s.rounds.length > 1 ? '' : 'disabled'}>${armTxt('delRound', 'Usuń rundę')}</button>
@@ -594,6 +599,12 @@ document.addEventListener('change', (e) => {
     const r = set().rounds[sel.r];
     if (el.value === '') delete r.dailyDoubles;
     else r.dailyDoubles = Number(el.value);
+    return save();
+  }
+  if (d.wheel != null) {
+    const r = set().rounds[sel.r];
+    if (el.value === '') delete r.wheelFields;
+    else r.wheelFields = Number(el.value);
     return save();
   }
 });

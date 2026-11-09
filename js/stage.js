@@ -1,7 +1,7 @@
 // Plansza: wspólne rysowanie dla okna streamu (board.html), podglądu w panelu
 // i ekranu gracza (play.html). Strona, która jej używa, dostarcza widok, źródło mediów
 // i zegar prowadzącego; plansza rysuje, gra efekty i (gdy ma dźwięk) audio z pytań.
-import { ANSWER_SECONDS, FINAL_SECONDS } from './engine.js';
+import { ANSWER_SECONDS, FINAL_SECONDS, SPIN_MS, DRAW_MS } from './engine.js';
 import * as sound from './sound.js';
 import * as avatars from './avatars.js';
 
@@ -23,6 +23,7 @@ let lastPhaseKey = '';
 let prevScores = new Map();
 let lastSecond = null;
 let mediaVer = null;
+let drawTimer = null;
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -55,6 +56,13 @@ export function update(m) {
   }
   if (opts.sound && !first && view.fx && lastFx && view.fx.n > lastFx.n) sound.play(view.fx.type);
   lastFx = view.fx;
+  // po losowaniu osoby na kole: podświetl odpowiadającego na dolnej belce
+  clearTimeout(drawTimer);
+  const dw = view.phase === 'wheel' ? view.cur?.wheel : null;
+  if (dw?.drawAt) {
+    const left = dw.drawAt + DRAW_MS - now();
+    if (left > 0) drawTimer = setTimeout(() => render(), left + 50);
+  }
   render();
   syncAudio();
 }
@@ -120,11 +128,12 @@ function bar() {
   else if (ph === 'board' || ph === 'round-intro')
     round = `${esc(v.roundName)} <span>stawki ${v.values[0]}–${v.values[v.values.length - 1]} · ${v.qDone}/${v.qTotal}</span>`;
   else if (ph === 'dd') round = `Wszystko albo nic <span>${esc(v.cur.category)}</span>`;
+  else if (ph === 'wheel') round = `Koło fortuny <span>za ${v.cur.value} · pytania od graczy</span>`;
   else if (ph === 'question' || ph === 'reveal')
     round = `${esc(v.cur.category)} <span>${v.cur.dd ? 'stawka ' + v.cur.wager : 'za ' + v.cur.value}</span>`;
   else if (ph.startsWith('final')) round = `Finał <span>${esc(v.final?.category || '')}</span>`;
   else if (ph === 'end') round = 'Wyniki <span>koniec odcinka</span>';
-  const alarm = ph === 'dd' ? ' alarm' : '';
+  const alarm = ph === 'dd' || ph === 'wheel' ? ' alarm' : '';
   return `<div class="bar${alarm}"><div class="logo">${esc(v.title)}</div><div class="round">${round}</div><div class="air"><i class="dot"></i>NA ŻYWO</div></div>`;
 }
 
@@ -135,9 +144,13 @@ function playerTag(p) {
   let tag = '';
   if (!p.connected) tag = 'offline';
   if (v.phase === 'lobby') tag = p.connected ? 'gotowy' : 'czeka';
-  if (['board', 'round-intro', 'dd'].includes(v.phase) && v.picker === p.id) {
+  if (['board', 'round-intro', 'dd', 'wheel'].includes(v.phase) && v.picker === p.id) {
     cls += ' pick';
-    tag = v.phase === 'dd' ? 'gra o wszystko' : 'wybiera';
+    tag = v.phase === 'dd' ? 'gra o wszystko' : v.phase === 'wheel' ? 'kręci' : 'wybiera';
+  }
+  if (v.phase === 'wheel' && cur?.wheel?.target === p.id && cur.wheel.target !== v.picker && (!cur.wheel.drawAt || now() >= cur.wheel.drawAt + DRAW_MS)) {
+    cls = 'p buzz';
+    tag = 'odpowiada';
   }
   if (cur && (v.phase === 'question' || v.phase === 'reveal')) {
     if (cur.buzzed === p.id) {
@@ -146,9 +159,9 @@ function playerTag(p) {
     } else if (cur.wrong.includes(p.id)) {
       cls += ' locked';
       tag = 'pudło';
-    } else if (cur.dd || cur.buzzed) {
+    } else if (cur.solo || cur.buzzed) {
       cls += ' locked';
-      tag = cur.dd ? '' : 'blokada';
+      tag = cur.solo ? '' : 'blokada';
     }
     if (v.phase === 'reveal' && cur.result?.id === p.id && cur.result.verdict !== 'wrong') {
       cls = 'p buzz';
@@ -409,6 +422,7 @@ function main() {
       <div class="crtline">Stawka: ${v.cur.wager == null ? 'ustalana…' : v.cur.wager}</div>
     </div>`;
   }
+  if (ph === 'wheel') return wheelHTML();
   if (ph === 'question' || ph === 'reveal') {
     const c = v.cur;
     const shownImg = ph === 'reveal' && v.answerImage ? v.answerImage : c.image;
@@ -417,7 +431,7 @@ function main() {
     let foot = '';
     if (ph === 'question') {
       let st;
-      if (c.buzzed) st = `<div class="state buzz">${c.dd ? 'Odpowiada' : 'Zgłasza się'}: ${esc(nameOf(c.buzzed))}</div>`;
+      if (c.buzzed) st = `<div class="state buzz">${c.solo ? 'Odpowiada' : 'Zgłasza się'}: ${esc(nameOf(c.buzzed))}</div>`;
       else if (c.buzzOpen) st = `<div class="state open">Buzzery otwarte</div>`;
       else st = `<div class="state closed">Buzzery zamknięte</div>`;
       const showTimer = (c.buzzed && c.buzzedAt) || c.buzzOpen;
@@ -428,11 +442,12 @@ function main() {
       if (!r || r.verdict === 'nobody') verdict = `<div class="verdict none">Nikt nie wiedział</div>`;
       else if (r.verdict === 'wrong') verdict = `<div class="verdict wrong">${esc(nameOf(r.id))} ${r.delta}</div>`;
       else verdict = `<div class="verdict right">${esc(nameOf(r.id))} +${r.delta}</div>`;
+      if (c.wheel?.bonus) verdict += `<div class="verdict right enter-pop">autor ${esc(c.wheel.bonus.name)} +${c.wheel.bonus.delta}</div>`;
       foot = `<div class="answer enter-pop" style="flex:1"><div class="k">Odpowiedź</div><div class="a">${esc(c.answer)}</div></div>${verdict}`;
     }
     const pos = `${v.qDone} z ${v.qTotal}`;
     return `<div class="q">
-      <div class="meta"><b class="${c.dd ? 'red' : ''}">${c.dd ? c.wager : c.value}</b>${c.dd ? 'wszystko albo nic · ' : ''}pytanie ${pos}</div>
+      <div class="meta"><b class="${c.dd ? 'red' : ''}">${c.dd ? c.wager : c.value}</b>${c.dd ? 'wszystko albo nic · ' : ''}${c.wheel ? `koło fortuny · pytanie od <span class="w-auth">${esc(c.wheel.author)}</span>` : `pytanie ${pos}`}</div>
       <div class="body${hasMedia ? ' media' : ''}"><div class="text${ph === 'reveal' ? ' dim' : ''}" id="qtext" style="--qsize:${hasMedia ? msize(c.text) : qsize(c.text)}"></div>${img}</div>
       <div class="foot">${foot}</div>
     </div>`;
@@ -503,6 +518,138 @@ function main() {
   return `<div class="waiting">…</div>`;
 }
 
+// ---------- koło fortuny ----------
+// Obrót liczony z czasu prowadzącego (spinAt + ziarno), więc każde urządzenie widzi to samo
+// i ktoś, kto odświeży stronę w trakcie, wskakuje w to samo miejsce.
+
+const WCOL = [
+  ['#ffb22e', '#120d07'],
+  ['#2a1e0d', '#ffb22e'],
+  ['#ff4130', '#120d07'],
+  ['#1a1309', '#fff0cc'],
+];
+const IDLE_DPS = 10; // wolny obrót w oczekiwaniu na zakręcenie
+const TURNS = 6;
+let wheelSnd = { under: null, land: null, draw: null, drawStep: null };
+
+const easeOut = (p) => 1 - Math.pow(1 - p, 3.6);
+function wheelAngle(w, t) {
+  const n = w.segs.length || 1;
+  const seg = 360 / n;
+  const idle = (ms) => ((ms / 1000) * IDLE_DPS) % 360;
+  if (!w.spinAt || w.idx == null) return idle(t);
+  const r0 = idle(w.spinAt);
+  const jitter = (((w.seed % 1000) / 1000) - 0.5) * 0.6 * seg;
+  const target = (((-((w.idx + 0.5) * seg + jitter)) % 360) + 360) % 360;
+  const delta = TURNS * 360 + ((((target - r0) % 360) + 360) % 360);
+  const p = Math.min(1, Math.max(0, (t - w.spinAt) / SPIN_MS));
+  return r0 + delta * easeOut(p);
+}
+
+function segPath(i, n, R) {
+  if (n === 1) return `M0 ${-R}A${R} ${R} 0 1 1 0 ${R}A${R} ${R} 0 1 1 0 ${-R}Z`;
+  const a0 = ((i * 360) / n) * (Math.PI / 180);
+  const a1 = (((i + 1) * 360) / n) * (Math.PI / 180);
+  const p = (a) => `${(Math.sin(a) * R).toFixed(2)} ${(-Math.cos(a) * R).toFixed(2)}`;
+  return `M0 0L${p(a0)}A${R} ${R} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${p(a1)}Z`;
+}
+
+function wheelSVG(w) {
+  const n = w.segs.length;
+  const R = 100;
+  const seg = 360 / n;
+  const fs = Math.max(6.5, Math.min(13, 150 / n));
+  let body = '';
+  w.segs.forEach((sg, i) => {
+    let ci = i % WCOL.length;
+    if (n > 1 && i === n - 1 && ci === 0) ci = 1;
+    const [bg, fg] = WCOL[ci];
+    const label = sg.name.length > 11 ? sg.name.slice(0, 10) + '…' : sg.name;
+    const mid = (i + 0.5) * seg;
+    body += `<path d="${segPath(i, n, R)}" fill="${bg}" stroke="#0b0907" stroke-width="1.2" data-seg="${i}"/>`;
+    body += `<text transform="rotate(${(mid - 90).toFixed(2)}) translate(${R * 0.58} 0)" fill="${fg}" font-size="${fs.toFixed(1)}" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`;
+  });
+  let pegs = '';
+  for (let i = 0; i < n; i++) {
+    const a = ((i * seg) * Math.PI) / 180;
+    pegs += `<circle cx="${(Math.sin(a) * (R - 3)).toFixed(2)}" cy="${(-Math.cos(a) * (R - 3)).toFixed(2)}" r="1.8" fill="#fff0cc"/>`;
+  }
+  return `<svg class="wsvg" viewBox="-112 -118 224 230" aria-hidden="true">
+    <circle r="${R + 7}" fill="#120d07" stroke="#ffb22e" stroke-width="2"/>
+    <g id="wrot">${body}${pegs}</g>
+    <circle r="15" fill="#120d07" stroke="#ffb22e" stroke-width="2"/>
+    <text class="whub" font-size="9" fill="#ffb22e" text-anchor="middle" dominant-baseline="central">TK</text>
+    <path class="wptr" d="M-9 -116 L9 -116 L0 -95 Z" fill="#ff4130" stroke="#fff0cc" stroke-width="1.5"/>
+  </svg>`;
+}
+
+function wheelHTML() {
+  const v = view;
+  const c = v.cur;
+  const w = c.wheel;
+  const picker = esc(nameOf(v.picker));
+  const own = w.own;
+  let res = '';
+  if (w.idx != null) {
+    let who;
+    if (!own) who = `<div class="w-line">odpowiada <b>${esc(nameOf(w.target))}</b>, sam, bez buzzerów</div>`;
+    else if (!w.target) who = `<div class="w-own">Własne pytanie!</div><div class="w-line"><b>${picker}</b> wybiera, komu je oddać, albo losujemy</div>`;
+    else if (w.passed === 'draw') {
+      const chips = w.cands.map((id, i) => `<span data-cand="${i}">${esc(nameOf(id))}</span>`).join('');
+      who = `<div class="w-own">Własne pytanie!</div><div class="w-line">losujemy, kto odpowiada</div><div class="w-draw" id="wdraw">${chips}</div><div class="w-line w-drawn">odpowiada <b>${esc(nameOf(w.target))}</b></div>`;
+    } else who = `<div class="w-own">Własne pytanie!</div><div class="w-line"><b>${picker}</b> oddaje je: odpowiada <b>${esc(nameOf(w.target))}</b></div>`;
+    res = `<div class="w-res"><div class="sub">pytanie od</div><div class="w-author">${esc(w.author)}</div>${who}</div>`;
+  }
+  return `<div class="wheel${w.idx == null ? ' idle' : ''}" id="wheel">
+    <div class="w-l">${wheelSVG(w)}</div>
+    <div class="w-r">
+      <div class="dd-band w-band">Koło fortuny</div>
+      <div class="sub">kręci <b>${picker}</b> · za <b>${c.value}</b> · ${w.segs.length} ${w.segs.length === 1 ? 'pytanie' : w.segs.length < 5 ? 'pytania' : 'pytań'} na kole</div>
+      ${w.idx == null ? '<div class="crtline w-wait">czekamy na zakręcenie…</div>' : '<div class="crtline w-spin">kręci się…</div>'}
+      ${res}
+    </div>
+  </div>`;
+}
+
+function wheelTick(t) {
+  const el = document.getElementById('wheel');
+  const c = view?.cur;
+  if (!el || view.phase !== 'wheel' || !c?.wheel) return;
+  const w = c.wheel;
+  const n = w.segs.length || 1;
+  const ang = wheelAngle(w, t);
+  const g = document.getElementById('wrot');
+  if (g) g.setAttribute('transform', `rotate(${ang.toFixed(2)})`);
+  const landed = !!w.spinAt && t >= w.spinAt + SPIN_MS;
+  el.classList.toggle('landed', landed);
+  // pod wskaźnikiem: kliknięcie przy każdym segmencie, uderzenie na koniec
+  const under = Math.floor(((((-ang) % 360) + 360) % 360) / (360 / n));
+  if (w.spinAt && !landed && wheelSnd.under !== null && under !== wheelSnd.under && opts.sound) sound.play('click');
+  wheelSnd.under = under;
+  if (landed && wheelSnd.land !== w.spinAt) {
+    if (t - (w.spinAt + SPIN_MS) < 1500 && opts.sound) sound.play(w.own ? 'dd' : 'land');
+    wheelSnd.land = w.spinAt;
+  }
+  const win = el.querySelector('path.win');
+  if (landed && !win) el.querySelector(`path[data-seg="${w.idx}"]`)?.classList.add('win');
+  // losowanie osoby
+  const box = document.getElementById('wdraw');
+  if (box && w.drawAt) {
+    const k = w.cands.length;
+    const ti = Math.max(0, w.cands.indexOf(w.target));
+    const p = Math.min(1, Math.max(0, (t - w.drawAt) / DRAW_MS));
+    const steps = 3 * k + ti;
+    const step = p >= 1 ? steps : Math.floor(steps * easeOut(p));
+    const on = step % k;
+    if (wheelSnd.drawStep !== step) {
+      if (wheelSnd.drawStep !== null && opts.sound) sound.play(p >= 1 ? 'land' : 'click');
+      wheelSnd.drawStep = step;
+    }
+    box.querySelectorAll('[data-cand]').forEach((s) => s.classList.toggle('on', Number(s.dataset.cand) === on));
+    el.classList.toggle('drawn', p >= 1);
+  } else el.classList.toggle('drawn', true);
+}
+
 let $main = null;
 let $lower = null;
 let $bar = null;
@@ -520,6 +667,7 @@ function render() {
   $lower.innerHTML = lower();
   const html = main();
   const phaseKey = view.phase + ':' + (view.cur ? `${view.cur.c}:${view.cur.q}` : '') + ':' + view.round;
+  if (view.phase !== 'wheel') wheelSnd = { under: null, land: null, draw: null, drawStep: null };
   if (html !== lastMainKey) {
     $main.innerHTML = html;
     lastMainKey = html;
@@ -552,6 +700,7 @@ function drawQR() {
 function tick() {
   if (!view) return;
   const t = now();
+  wheelTick(t);
   const qt = document.getElementById('qtext');
   if (qt) {
     let text = null;

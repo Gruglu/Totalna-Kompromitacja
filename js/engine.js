@@ -5,13 +5,18 @@ export const ANSWER_SECONDS = 5;
 export const FINAL_SECONDS = 30;
 export const DD_MIN = 5;
 export const DD_PER_ROUND = [1, 2];
+// koło fortuny: pytania od graczy (każdy wysyła swoje), ukryte pola na planszy jak „wszystko albo nic”
+export const WHEEL_PER_PLAYER = 2;
+export const SPIN_MS = 6500; // kręcenie kołem
+export const DRAW_MS = 3200; // losowanie osoby, gdy ktoś trafi na własne pytanie
+export const WHEEL_CAT = 'Koło fortuny';
 
 import { rulesFor } from './rules.js';
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const now = () => Date.now();
 
-export function newGame(set, players = []) {
+export function newGame(set, players = [], pool = null) {
   return {
     v: 1,
     title: set.title || 'Totalna Kompromitacja',
@@ -29,8 +34,159 @@ export function newGame(set, players = []) {
     screen: null, // ekran dodatkowy w poczekalni i po odcinku: 'season' | 'shame' | 'punish'
     shame: [], // Hall of Shame: najgłupsze odpowiedzi odcinka
     punish: { winner: null, loser: null, nick: '' },
+    wheel: { pool: pool ? pool.map((x) => ({ ...x, used: false })) : poolFromSet(set), cells: {} },
   };
 }
+
+// ---------- koło fortuny ----------
+
+const WHEEL_FIELDS = ['q', 'a', 'note', 'image', 'answerImage', 'audio', 'audioStart', 'audioEnd'];
+const wid = () => 'w' + Math.random().toString(36).slice(2, 9);
+const norm = (t) => String(t ?? '').trim().toLowerCase();
+
+function wheelItem(src, from) {
+  const it = { id: src.id || wid(), author: String(src.author ?? '').trim().slice(0, 24), authorId: src.authorId ?? null, from, used: false };
+  for (const f of WHEEL_FIELDS) if (src[f] != null && src[f] !== '') it[f] = typeof src[f] === 'string' ? src[f].trim().slice(0, f === 'q' ? 400 : 300) : src[f];
+  const alt = Array.isArray(src.alt) ? src.alt : typeof src.alt === 'string' ? src.alt.split(/[;\n]/) : [];
+  const clean = alt.map((x) => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 8);
+  if (clean.length) it.alt = clean;
+  return it;
+}
+
+// pytania na koło zapisane w pliku zestawu ("wheel": [{ author, q, a, ... }])
+export function poolFromSet(set) {
+  return (Array.isArray(set?.wheel) ? set.wheel : []).filter((x) => x && x.q && x.a).map((x, i) => wheelItem({ ...x, id: 'f' + i }, 'file'));
+}
+
+// nowy zestaw w poczekalni: pytania z pliku podmienione, pytania od graczy i prowadzącego zostają
+export function withSet(s, set) {
+  const pool = (s.wheel?.pool || []).filter((x) => x.from !== 'file');
+  return { ...s, set, title: set.title || s.title, wheel: { pool: [...poolFromSet(set), ...pool], cells: {} } };
+}
+
+export const wheelPool = (s) => s.wheel?.pool || [];
+export const wheelLeft = (s) => wheelPool(s).filter((x) => !x.used);
+export function authorName(s, it) {
+  const p = it?.authorId ? player(s, it.authorId) : s.players.find((x) => it?.author && norm(x.name) === norm(it.author));
+  return p ? p.name : it?.author || '?';
+}
+// zasady z uwzględnieniem pytań na koło, które są w stanie gry, a nie w pliku
+export const rulesOf = (s) => rulesFor(s.set, wheelPool(s).length);
+export function isAuthor(s, it, id) {
+  if (!it || !id) return false;
+  if (it.authorId) return it.authorId === id;
+  return !!it.author && norm(it.author) === norm(nameOf(s, id));
+}
+export function wheelMine(s, id) {
+  return wheelPool(s).filter((x) => isAuthor(s, x, id));
+}
+
+// ile pól z kołem w każdej rundzie: "wheelFields" z rundy albo pula rozłożona równo (więcej w późniejszych)
+export function wheelPlan(set, poolSize) {
+  const rounds = set?.rounds || [];
+  const fixed = rounds.map((r) => (Number.isFinite(Number(r.wheelFields)) && r.wheelFields !== null && r.wheelFields !== '' ? Math.max(0, Math.round(Number(r.wheelFields))) : null));
+  const auto = fixed.map((f, i) => (f == null ? i : -1)).filter((i) => i >= 0);
+  let rest = Math.max(0, poolSize - fixed.reduce((n, f) => n + (f || 0), 0));
+  const out = fixed.map((f) => f || 0);
+  if (auto.length) {
+    const each = Math.floor(rest / auto.length);
+    let extra = rest - each * auto.length;
+    for (let j = auto.length - 1; j >= 0; j--) {
+      out[auto[j]] = each + (extra > 0 ? 1 : 0);
+      if (extra > 0) extra--;
+    }
+  }
+  return out;
+}
+
+function placeWheel(s, r, count) {
+  const round = s.set.rounds[r];
+  const cells = [];
+  round.categories.forEach((cat, c) =>
+    cat.questions.forEach((_, q) => {
+      if ((q > 0 || round.values.length === 1) && !s.dd[key(r, c, q)]) cells.push([c, q]);
+    })
+  );
+  // najwyżej co trzecie pole, żeby plansza została planszą
+  const total = round.categories.reduce((n, cat) => n + cat.questions.length, 0);
+  count = Math.min(count, cells.length, Math.max(1, Math.floor(total / 3)));
+  const perCat = new Map();
+  let placed = 0;
+  while (placed < count && cells.length) {
+    const i = Math.floor(Math.random() * cells.length);
+    const [c, q] = cells.splice(i, 1)[0];
+    const n = perCat.get(c) || 0;
+    // rozrzuć po kategoriach: do kategorii z polem wraca dopiero, gdy wszystkie mają już tyle samo
+    const min = Math.min(...round.categories.map((_, cc) => perCat.get(cc) || 0));
+    if (n > min && cells.some(([cc]) => (perCat.get(cc) || 0) === min)) continue;
+    perCat.set(c, n + 1);
+    s.wheel.cells[key(r, c, q)] = true;
+    placed++;
+  }
+}
+
+// kolejność na kole: pytania tego samego autora nie stoją obok siebie
+function wheelOrder(s) {
+  const groups = new Map();
+  for (const x of [...wheelLeft(s)].sort(() => Math.random() - 0.5)) {
+    const k = norm(authorName(s, x));
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(x);
+  }
+  const out = [];
+  let last = null;
+  while (out.length < wheelLeft(s).length) {
+    const opts = [...groups.entries()].filter(([, g]) => g.length).sort((a, b) => b[1].length - a[1].length);
+    const pick = opts.find(([k]) => k !== last) || opts[0];
+    out.push(pick[1].shift());
+    last = pick[0];
+  }
+  return out;
+}
+
+function enterWheel(s, c, q, value) {
+  const segs = wheelOrder(s).map((x) => ({ id: x.id }));
+  s.cur = {
+    c,
+    q,
+    value,
+    dd: false,
+    wager: null,
+    buzzOpen: false,
+    openedAt: null,
+    buzzed: null,
+    buzzedAt: null,
+    tried: [],
+    wrong: [],
+    result: null,
+    shownAt: null,
+    wheel: { segs, pick: null, idx: null, spinAt: null, seed: 0, own: false, target: null, passed: null, drawAt: null, cands: [] },
+  };
+  s.phase = 'wheel';
+  fx(s, 'wheel');
+}
+
+// pytanie i kategoria aktualnego pola (zwykłe albo z koła)
+export function curQuestion(s) {
+  const c = s.cur;
+  if (!c) return null;
+  if (c.wheel) return c.wheel.pick ? wheelPool(s).find((x) => x.id === c.wheel.pick) || null : null;
+  return roundOf(s).categories[c.c].questions[c.q];
+}
+export function curCategory(s) {
+  const c = s.cur;
+  if (!c) return '';
+  if (c.wheel) return WHEEL_CAT;
+  return roundOf(s).categories[c.c].name;
+}
+export const half = (v) => Math.round(v / 2 / 50) * 50 || Math.round(v / 2);
+// autor wylosowanego pytania jako gracz (premia), null gdy autora nie ma w grze
+export function authorPlayer(s) {
+  const it = s.cur?.wheel ? curQuestion(s) : null;
+  if (!it) return null;
+  return s.players.find((p) => isAuthor(s, it, p.id))?.id ?? null;
+}
+export const solo = (cur) => !!(cur && (cur.dd || cur.wheel));
 
 // ---------- pomocnicze ----------
 
@@ -66,7 +222,7 @@ function mediaCmd(s, cmd) {
 
 // pytanie, które jest teraz na ekranie (zwykłe albo finałowe)
 export function currentQuestion(s) {
-  if (s.cur && ['dd', 'question', 'reveal'].includes(s.phase)) return roundOf(s).categories[s.cur.c].questions[s.cur.q];
+  if (s.cur && ['dd', 'question', 'reveal'].includes(s.phase)) return curQuestion(s);
   if (s.final && ['final-question', 'final-reveal'].includes(s.phase)) return s.set.final;
   return null;
 }
@@ -81,6 +237,7 @@ export function mediaRefs(set) {
     (r.categories || []).forEach((c, ci) => (c.questions || []).forEach((q, qi) => add(q, `R${ri + 1} · ${c.name} · ${r.values?.[qi] ?? qi + 1}`)))
   );
   if (set?.final) add(set.final, 'Finał');
+  (Array.isArray(set?.wheel) ? set.wheel : []).forEach((q, i) => add(q, `Koło · ${q?.author || 'pytanie ' + (i + 1)}`));
   return out;
 }
 
@@ -180,14 +337,14 @@ export function reduce(state, a) {
       if (!['lobby', 'opener', 'rules'].includes(s.phase)) return state;
       s.phase = 'rules';
       s.screen = null;
-      s.rule = Math.max(0, Math.min(a.idx ?? 0, rulesFor(s.set).length - 1));
+      s.rule = Math.max(0, Math.min(a.idx ?? 0, rulesOf(s).length - 1));
       s.ruleAt = now();
       fx(s, 'rule');
       return s;
     }
     case 'ruleStep': {
       if (s.phase !== 'rules') return state;
-      const n = rulesFor(s.set).length;
+      const n = rulesOf(s).length;
       const i = s.rule + a.dir;
       if (i < 0 || i >= n) return state;
       s.rule = i;
@@ -207,6 +364,8 @@ export function reduce(state, a) {
       s.used = {};
       s.dd = {};
       s.set.rounds.forEach((_, r) => placeDailyDoubles(s, r));
+      s.wheel = { pool: wheelPool(s).map((x) => ({ ...x, used: false })), cells: {} };
+      wheelPlan(s.set, wheelLeft(s).length).forEach((n, r) => n && placeWheel(s, r, n));
       s.picker = s.players[Math.floor(Math.random() * s.players.length)].id;
       s.phase = 'round-intro';
       s.introAt = now();
@@ -228,6 +387,11 @@ export function reduce(state, a) {
       if (s.phase !== 'board' || s.used[k]) return state;
       const isDD = !!s.dd[k];
       s.used[k] = true;
+      if (s.wheel?.cells?.[k] && !isDD && wheelLeft(s).length) {
+        mediaCmd(s, 'stop');
+        enterWheel(s, a.c, a.q, roundOf(s).values[a.q]);
+        return s;
+      }
       s.cur = {
         c: a.c,
         q: a.q,
@@ -267,17 +431,17 @@ export function reduce(state, a) {
       return s;
     }
     case 'openBuzz':
-      if (s.phase !== 'question' || cur.dd || cur.buzzed) return state;
+      if (s.phase !== 'question' || solo(cur) || cur.buzzed) return state;
       cur.buzzOpen = true;
       cur.openedAt = now();
       fx(s, 'open');
       return s;
     case 'startClock':
-      if (s.phase !== 'question' || !cur.dd) return state;
+      if (s.phase !== 'question' || !solo(cur)) return state;
       cur.buzzedAt = now();
       return s;
     case 'buzz': {
-      if (s.phase !== 'question' || !cur.buzzOpen || cur.buzzed || cur.dd) return state;
+      if (s.phase !== 'question' || !cur.buzzOpen || cur.buzzed || solo(cur)) return state;
       if (cur.tried.includes(a.id) || !player(s, a.id)) return state;
       cur.buzzOpen = false;
       cur.buzzed = a.id;
@@ -305,7 +469,7 @@ export function reduce(state, a) {
       cur.wrong.push(id);
       cur.buzzed = null;
       cur.buzzedAt = null;
-      if (cur.dd || !rebuzzPossible(s)) {
+      if (solo(cur) || !rebuzzPossible(s)) {
         cur.result = { id, verdict: 'wrong', delta: -value };
         s.phase = 'reveal';
       } else {
@@ -316,7 +480,7 @@ export function reduce(state, a) {
       return s;
     }
     case 'manualBuzz': {
-      if (s.phase !== 'question' || cur.dd || cur.buzzed) return state;
+      if (s.phase !== 'question' || solo(cur) || cur.buzzed) return state;
       if (cur.tried.includes(a.id)) return state;
       cur.buzzOpen = false;
       cur.buzzed = a.id;
@@ -324,6 +488,130 @@ export function reduce(state, a) {
       fx(s, 'buzz');
       return s;
     }
+    // ---------- koło fortuny ----------
+    case 'wheelExtra': {
+      // dodatkowy obrót spoza planszy, np. gdy zostały pytania graczy
+      if (s.phase !== 'board' || !wheelLeft(s).length) return state;
+      const v = Math.round(Number(a.value));
+      if (!Number.isFinite(v) || v <= 0) return state;
+      mediaCmd(s, 'stop');
+      enterWheel(s, null, null, v);
+      return s;
+    }
+    case 'wheelSpin': {
+      const w = cur?.wheel;
+      if (s.phase !== 'wheel' || !w || w.pick) return state;
+      const left = new Set(wheelLeft(s).map((x) => x.id));
+      w.segs = w.segs.filter((x) => left.has(x.id));
+      if (!w.segs.length) return state;
+      w.idx = Math.floor(Math.random() * w.segs.length);
+      w.pick = w.segs[w.idx].id;
+      w.seed = Math.floor(Math.random() * 1e6);
+      w.spinAt = now();
+      const it = wheelPool(s).find((x) => x.id === w.pick);
+      it.used = true;
+      w.own = isAuthor(s, it, s.picker);
+      w.target = w.own ? null : s.picker;
+      // nikt inny nie gra: własne pytanie i tak trzeba wziąć
+      if (w.own && !s.players.some((p) => p.id !== s.picker)) w.target = s.picker;
+      fx(s, 'spin');
+      return s;
+    }
+    case 'wheelPass': {
+      const w = cur?.wheel;
+      if (s.phase !== 'wheel' || !w?.pick || !w.own || w.drawAt) return state;
+      if (!player(s, a.id) || a.id === s.picker) return state;
+      w.target = a.id;
+      w.passed = 'chosen';
+      fx(s, 'pass');
+      return s;
+    }
+    case 'wheelDraw': {
+      const w = cur?.wheel;
+      if (s.phase !== 'wheel' || !w?.pick || !w.own || w.drawAt) return state;
+      const cands = s.players.filter((p) => p.id !== s.picker).map((p) => p.id);
+      if (!cands.length) return state;
+      w.cands = cands;
+      w.target = cands[Math.floor(Math.random() * cands.length)];
+      w.passed = 'draw';
+      w.drawAt = now();
+      fx(s, 'draw');
+      return s;
+    }
+    case 'wheelGo': {
+      const w = cur?.wheel;
+      if (s.phase !== 'wheel' || !w?.pick || !w.target) return state;
+      s.phase = 'question';
+      cur.shownAt = now();
+      cur.buzzed = w.target;
+      cur.buzzedAt = null; // zegar rusza po przeczytaniu, jak przy „wszystko albo nic”
+      fx(s, 'reveal');
+      return s;
+    }
+    case 'wheelCancel': {
+      // awaryjnie przed zakręceniem: pole z kołem gra jako zwykłe pytanie albo wraca na planszę
+      if (s.phase !== 'wheel' || cur?.wheel?.pick) return state;
+      if (cur.c == null) {
+        s.cur = null;
+        s.phase = 'board';
+        return s;
+      }
+      delete cur.wheel;
+      s.phase = 'question';
+      cur.shownAt = now();
+      fx(s, 'reveal');
+      return s;
+    }
+    case 'wheelBonus': {
+      // autor zagiął odpowiadającego: połowa stawki, jeśli prowadzący uzna pytanie za uczciwe
+      const w = cur?.wheel;
+      if (s.phase !== 'reveal' || !w || w.bonus) return state;
+      const r = cur.result;
+      if (!r || !['wrong', 'nobody'].includes(r.verdict)) return state;
+      const id = authorPlayer(s);
+      if (!id || id === w.target) return state;
+      const gain = half(cur.value);
+      player(s, id).score += gain;
+      w.bonus = { id, delta: gain };
+      fx(s, 'bonus');
+      return s;
+    }
+    case 'wheelAdd': {
+      const q = String(a.q ?? '').trim();
+      const ans = String(a.a ?? '').trim();
+      if (!q || !ans) return state;
+      s.wheel = s.wheel || { pool: [], cells: {} };
+      if (a.from === 'player') {
+        if (!player(s, a.authorId) || wheelMine(s, a.authorId).length >= WHEEL_PER_PLAYER) return state;
+      }
+      const author = a.authorId ? nameOf(s, a.authorId) : String(a.author ?? '').trim();
+      s.wheel.pool.push(wheelItem({ q, a: ans, alt: a.alt, note: a.note, author, authorId: a.authorId ?? null }, a.from === 'player' ? 'player' : 'host'));
+      return s;
+    }
+    case 'wheelEdit': {
+      const it = wheelPool(s).find((x) => x.id === a.id);
+      if (!it) return state;
+      if (a.byPlayer && (it.used || !isAuthor(s, it, a.byPlayer))) return state;
+      const next = wheelItem({ ...it, ...a.fields, id: it.id, authorId: 'authorId' in a.fields ? a.fields.authorId : it.authorId }, it.from);
+      if (!next.q || !next.a) return state;
+      next.used = it.used;
+      Object.keys(it).forEach((k) => delete it[k]);
+      Object.assign(it, next);
+      return s;
+    }
+    case 'wheelDel': {
+      const it = wheelPool(s).find((x) => x.id === a.id);
+      if (!it) return state;
+      if (a.byPlayer && (it.used || !isAuthor(s, it, a.byPlayer))) return state;
+      if (s.cur?.wheel?.pick === it.id) return state;
+      s.wheel.pool = wheelPool(s).filter((x) => x.id !== a.id);
+      return s;
+    }
+    case 'wheelClear':
+      if (s.phase === 'wheel') return state;
+      s.wheel = { pool: [], cells: s.wheel?.cells || {} };
+      return s;
+
     case 'nobody':
       if (s.phase !== 'question') return state;
       cur.buzzOpen = false;
@@ -550,7 +838,7 @@ export function boardView(s) {
     v.opener = { at: s.openerAt, episode: s.set.episode ?? null, subtitle: s.set.subtitle || null };
   }
   if (s.phase === 'rules') {
-    const list = rulesFor(s.set);
+    const list = rulesOf(s);
     const r0 = list[s.rule] || list[0];
     v.rules = { idx: s.rule, count: list.length, title: r0.title, lines: r0.board, at: s.ruleAt };
   }
@@ -561,12 +849,13 @@ export function boardView(s) {
     if (s.phase === 'reveal' || (s.phase === 'final-reveal' && s.final?.shown)) v.answerImage = mq.answerImage;
   }
   if (s.cur) {
-    const q = r.categories[s.cur.c].questions[s.cur.q];
-    const showQ = s.phase !== 'dd';
+    const q = curQuestion(s) || {};
+    const showQ = s.phase !== 'dd' && s.phase !== 'wheel';
     v.cur = {
       c: s.cur.c,
       q: s.cur.q,
-      category: r.categories[s.cur.c].name,
+      category: curCategory(s),
+      solo: solo(s.cur),
       value: s.cur.value,
       dd: s.cur.dd,
       wager: s.cur.wager,
@@ -583,7 +872,26 @@ export function boardView(s) {
       result: s.cur.result,
       answer: s.phase === 'reveal' ? q.a : null,
     };
+    const w = s.cur.wheel;
+    if (w) {
+      const it = curQuestion(s);
+      const byId = new Map(wheelPool(s).map((x) => [x.id, x]));
+      v.cur.wheel = {
+        segs: w.segs.map((x) => ({ id: x.id, name: authorName(s, byId.get(x.id)) })),
+        idx: w.idx,
+        spinAt: w.spinAt,
+        seed: w.seed,
+        author: it ? authorName(s, it) : null,
+        own: w.own,
+        target: w.target,
+        passed: w.passed,
+        drawAt: w.drawAt,
+        cands: w.cands,
+        bonus: w.bonus ? { name: nameOf(s, w.bonus.id), delta: w.bonus.delta } : null,
+      };
+    }
   }
+  v.wheelLeft = wheelLeft(s).length;
   if (s.final) {
     const f = s.set.final;
     const fv = {
@@ -626,10 +934,25 @@ export function playerView(s, id) {
     value: null,
   };
   if (s.cur) {
-    const r = roundOf(s);
-    v.category = r.categories[s.cur.c].name;
+    v.category = curCategory(s);
     v.value = s.cur.dd ? s.cur.wager : s.cur.value;
     v.dd = s.cur.dd;
+    v.solo = solo(s.cur);
+    const w = s.cur.wheel;
+    if (w) {
+      const it = curQuestion(s);
+      v.wheel = {
+        spun: !!w.pick,
+        landIn: w.spinAt ? Math.max(0, w.spinAt + SPIN_MS - now()) : null,
+        author: it ? authorName(s, it) : null,
+        own: w.own,
+        mineOwn: w.own && s.picker === id,
+        target: w.target ? { id: w.target, name: nameOf(s, w.target), me: w.target === id } : null,
+        passed: w.passed,
+        drawIn: w.drawAt ? Math.max(0, w.drawAt + DRAW_MS - now()) : null,
+        others: w.own && s.picker === id && !w.target ? s.players.filter((p) => p.id !== id).map((p) => ({ id: p.id, name: p.name })) : [],
+      };
+    }
     v.buzzed = s.cur.buzzed ? { id: s.cur.buzzed, name: nameOf(s, s.cur.buzzed), me: s.cur.buzzed === id } : null;
     v.tried = s.cur.tried.includes(id);
     v.canBuzz = s.phase === 'question' && s.cur.buzzOpen && !s.cur.buzzed && !v.tried;
@@ -645,6 +968,10 @@ export function playerView(s, id) {
       remaining: s.final.qAt ? Math.max(0, s.final.qAt + FINAL_SECONDS * 1000 - now()) : null,
     };
   }
+  // własne pytania na koło: gracz widzi tylko swoje
+  v.wheelMine = wheelMine(s, id).map((x) => ({ id: x.id, q: x.q, a: x.a, alt: (x.alt || []).join('; '), used: !!x.used }));
+  v.wheelMax = WHEEL_PER_PLAYER;
+  v.wheelOpen = !!p && !['end'].includes(s.phase);
   if (s.phase === 'end') v.ranking = standings(s).map((x) => ({ name: x.name, score: x.score, me: x.id === id }));
   return v;
 }
@@ -675,6 +1002,16 @@ export function validateSet(set) {
   });
   if (set.final && (!set.final.q || !set.final.a || !set.final.category))
     err.push('Finał: potrzebne "category", "q" i "a".');
+  if (set.wheel != null) {
+    if (!Array.isArray(set.wheel)) err.push('"wheel" musi być listą pytań na koło.');
+    else
+      set.wheel.forEach((q, i) => {
+        if (!q?.q || !q?.a) err.push(`Koło, pytanie ${i + 1}: potrzebne "q" i "a".`);
+      });
+  }
+  (set.rounds || []).forEach((r, ri) => {
+    if (r?.wheelFields != null && !(Number(r.wheelFields) >= 0)) err.push(`Runda ${ri + 1}: "wheelFields" musi być liczbą od 0.`);
+  });
   if (set.rules != null) {
     if (!Array.isArray(set.rules) || !set.rules.length) err.push('"rules" musi być niepustą listą.');
     else
