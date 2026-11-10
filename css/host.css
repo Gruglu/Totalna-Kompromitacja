@@ -170,6 +170,8 @@ body.pv-phone .preview { aspect-ratio: 390 / 480; max-width: 390px; }
 /* ---------- koło fortuny ---------- */
 .mini button.wh::after { content: 'KOŁO'; position: absolute; top: 3px; right: 4px; font-family: var(--f-mono); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; color: var(--amber); text-shadow: none; }
 .mini button.wh { border-color: var(--amber-dim); }
+.mini button.bl::after { content: 'CIEMNO'; position: absolute; top: 3px; right: 4px; font-family: var(--f-mono); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; color: var(--hot); text-shadow: none; }
+.mini button.bl:disabled::after { content: ''; }
 .mini button.wh:disabled::after { content: ''; }
 .wheel-box summary { cursor: pointer; list-style: none; }
 .wheel-box summary::-webkit-details-marker { display: none; }

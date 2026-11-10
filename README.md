@@ -73,6 +73,8 @@ Pytanie: `q` (treść), `a` (odpowiedź), opcjonalnie `alt` (inne akceptowane od
 Odcinek: `episode` (numer w czołówce; bez tego pola brany z nazwy pliku `odcinek-2.json`) i `subtitle` (podpis pod logo). Własne zasady: `rules` jako lista `{ "title", "board": [krótkie linijki na planszę], "host": "tekst do przeczytania" }`; bez tego pola panel układa zasady sam na podstawie zestawu (rundy, stawki, pola „wszystko albo nic”, finał, czy są media).
 Finał: `category`, `q`, `a`. Liczba pól „wszystko albo nic” na rundę: `dailyDoubles` (domyślnie 1 i 2).
 Koło fortuny: `wheel` to lista `{ "author", "q", "a", "alt", "note" }` (mogą też mieć media jak zwykłe pytania), a `wheelFields` w rundzie ustala liczbę pól z kołem (bez tego pola: pytania graczy po równo na rundy). Pytania, które gracze wpiszą na telefonach, nie trafiają do pliku, leżą w stanie gry u prowadzącego.
+Kategoria w ciemno: `blind` to lista `{ "category", "q", "a", "alt", "note" }` (mogą mieć media). Na planszy są ukryte pola (domyślnie 1 na rundę, zmienisz to przez `blindFields` w rundzie). Pole zabiera pytanie z planszy i zamiast niego losuje pytanie z puli, za podwójną stawkę, z buzzerami dla wszystkich. Gracze widzą nazwę kategorii dopiero razem z pytaniem.
+Kadr z gry: `zoom` w pytaniu to lista obrazków od najbliższego zbliżenia do pełnego kadru, np. `["media/x-1.jpg", "media/x-2.jpg", "media/x-3.jpg"]`. Prowadzący oddala klawiszem **E** (gdy nikt nie odpowiada). Stawka maleje z etapem: 100%, 2/3, 1/3 (zaokrąglone do 50); inne mnożniki w rundzie przez `zoomPoints`, np. `[1, 0.5, 0.25]`. Po odpowiedzi widać `answerImage` albo pełny kadr.
 
 Prawdziwych pytań nie wrzucamy do repo (`pytania/*.json` poza przykładem jest w `.gitignore`).
 
