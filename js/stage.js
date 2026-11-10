@@ -129,11 +129,12 @@ function bar() {
     round = `${esc(v.roundName)} <span>stawki ${v.values[0]}–${v.values[v.values.length - 1]} · ${v.qDone}/${v.qTotal}</span>`;
   else if (ph === 'dd') round = `Wszystko albo nic <span>${esc(v.cur.category)}</span>`;
   else if (ph === 'wheel') round = `Koło fortuny <span>za ${v.cur.value} · pytania od graczy</span>`;
+  else if (ph === 'blind') round = `Kategoria w ciemno <span>za ${v.cur.value} · podwójna stawka</span>`;
   else if (ph === 'question' || ph === 'reveal')
-    round = `${esc(v.cur.category)} <span>${v.cur.dd ? 'stawka ' + v.cur.wager : 'za ' + v.cur.value}</span>`;
+    round = `${esc(v.cur.category)} <span>${v.cur.dd ? 'stawka ' + v.cur.wager : 'za ' + v.cur.value}${v.cur.blind ? ' · w ciemno x2' : ''}</span>`;
   else if (ph.startsWith('final')) round = `Finał <span>${esc(v.final?.category || '')}</span>`;
   else if (ph === 'end') round = 'Wyniki <span>koniec odcinka</span>';
-  const alarm = ph === 'dd' || ph === 'wheel' ? ' alarm' : '';
+  const alarm = ph === 'dd' || ph === 'wheel' || ph === 'blind' ? ' alarm' : '';
   return `<div class="bar${alarm}"><div class="logo">${esc(v.title)}</div><div class="round">${round}</div><div class="air"><i class="dot"></i>NA ŻYWO</div></div>`;
 }
 
@@ -423,6 +424,13 @@ function main() {
     </div>`;
   }
   if (ph === 'wheel') return wheelHTML();
+  if (ph === 'blind') {
+    return `<div class="center">
+      <div class="dd-band">Kategoria w ciemno</div>
+      <div class="sub">pytanie z kategorii, której nie ma na planszy · buzzery dla wszystkich</div>
+      <div class="crtline">Stawka podwójna: ${v.cur.base} × 2 = ${v.cur.value}</div>
+    </div>`;
+  }
   if (ph === 'question' || ph === 'reveal') {
     const c = v.cur;
     const shownImg = ph === 'reveal' && v.answerImage ? v.answerImage : c.image;
@@ -447,7 +455,7 @@ function main() {
     }
     const pos = `${v.qDone} z ${v.qTotal}`;
     return `<div class="q">
-      <div class="meta"><b class="${c.dd ? 'red' : ''}">${c.dd ? c.wager : c.value}</b>${c.dd ? 'wszystko albo nic · ' : ''}${c.wheel ? `koło fortuny · pytanie od <span class="w-auth">${esc(c.wheel.author)}</span>` : `pytanie ${pos}`}</div>
+      <div class="meta"><b class="${c.dd || c.blind ? 'red' : ''}">${c.dd ? c.wager : c.value}</b>${c.dd ? 'wszystko albo nic · ' : ''}${c.blind ? 'w ciemno x2 · ' : ''}${c.stages ? `zbliżenie ${c.stage + 1} z ${c.stages} · ` : ''}${c.wheel ? `koło fortuny · pytanie od <span class="w-auth">${esc(c.wheel.author)}</span>` : `pytanie ${pos}`}</div>
       <div class="body${hasMedia ? ' media' : ''}"><div class="text${ph === 'reveal' ? ' dim' : ''}" id="qtext" style="--qsize:${hasMedia ? msize(c.text) : qsize(c.text)}"></div>${img}</div>
       <div class="foot">${foot}</div>
     </div>`;
