@@ -25,7 +25,7 @@ export function defaultRules(set, wheelCount = 0) {
   const dd = rounds.map((r, i) => r.dailyDoubles ?? DD_PER_ROUND[i] ?? 1);
   const ddTxt = dd.map((n, i) => `${n} w rundzie ${i + 1}`).join(', ');
   const refs = mediaRefs(set);
-  const hasImg = refs.some((m) => m.field === 'image');
+  const hasImg = refs.some((m) => m.field === 'image' || m.field === 'zoom');
   const hasAudio = refs.some((m) => m.field === 'audio');
   const list = [];
 
@@ -68,6 +68,24 @@ export function defaultRules(set, wheelCount = 0) {
     board: [`ukryte pola: ${dd.map((n, i) => `${n} w R${i + 1}`).join(', ')}`, 'gra tylko ten, kto je wybrał', `stawka od ${DD_MIN} do całego wyniku`],
     host: `Na planszy są ukryte pola „wszystko albo nic”: ${ddTxt}. Kto na nie trafi, gra sam. Najpierw stawia, od ${DD_MIN} punktów do całego swojego wyniku, a jak ma mało, to do najwyższej stawki na planszy. Potem dopiero widzi pytanie. Stawkę wpisujecie na telefonie albo mówicie mi na głos. Odwaga jest opcjonalna, wstyd obowiązkowy.`,
   });
+
+  const blindOn = Array.isArray(set?.blind) && set.blind.length && rounds.some((r) => r.blindFields == null || Number(r.blindFields) > 0);
+  if (blindOn) {
+    list.push({
+      title: 'Kategoria w ciemno',
+      board: ['ukryte pola z kategorią, której nie ma na planszy', 'kategorię poznajecie razem z pytaniem', 'buzzery dla wszystkich, stawka podwójna', 'pudło też kosztuje podwójnie'],
+      host: 'Na planszy siedzą też pola „kategoria w ciemno”. Kto na nie trafi, nie dostaje pytania z kategorii, którą wybrał, tylko z zupełnie innej, której na planszy nie ma. Jakiej? Dowiecie się razem z pytaniem. Zgłaszają się wszyscy jak zwykle, a stawka jest podwójna. W obie strony, więc kto strzela na ślepo, traci podwójnie. Pasuje do Was idealnie.',
+    });
+  }
+
+  const hasZoom = rounds.some((r) => (r.categories || []).some((c) => (c.questions || []).some((q) => Array.isArray(q?.zoom) && q.zoom.length > 1)));
+  if (hasZoom) {
+    list.push({
+      title: 'Kadr z gry',
+      board: ['najpierw widać tylko zbliżenie', 'z każdym etapem obraz się oddala', 'im wcześniej zgadniesz, tym więcej punktów', 'pudło kosztuje tyle, ile pytanie jest warte w tej chwili'],
+      host: 'W pytaniach z kadrami najpierw pokazuję malutki wycinek z gry. Buzzery są otwarte od razu. Jak nikt nie wie, oddalam, a na koniec widać cały ekran. Za zgadnięcie przy pierwszym zbliżeniu jest pełna stawka, przy drugim dwie trzecie, przy pełnym kadrze jedna trzecia. Pudło kosztuje tyle, ile pytanie jest warte w tym momencie. Kto rozpozna grę po jednym pikselu interfejsu, zyskuje szacunek. Kto nie rozpozna przy pełnym ekranie, zyskuje miejsce w Hall of Shame.',
+    });
+  }
 
   const wheelOn = wheelCount > 0 || (Array.isArray(set?.wheel) && set.wheel.length) || rounds.some((r) => Number(r.wheelFields) > 0);
   if (wheelOn) {

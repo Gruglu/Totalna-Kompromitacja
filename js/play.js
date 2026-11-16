@@ -328,6 +328,7 @@ function body() {
     }
     return { info: ['Wszystko albo nic', `${v.pickerName} gra sam`], center: `<button class="buzzer locked" id="buzz">Patrz<small>to nie Twoja tura</small></button>` };
   }
+  if (ph === 'blind') return { info: ['Kategoria w ciemno', `za ${v.value} · podwójna stawka`], center: `<button class="buzzer" id="buzz">Czekaj<small>kategoria zaraz się odsłoni</small></button>` };
   if (ph === 'wheel' && v.wheel) {
     const w = v.wheel;
     const landed = w.spun && w.landIn === 0 ? true : w.spun && Date.now() - viewAt >= (w.landIn ?? 0);

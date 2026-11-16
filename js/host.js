@@ -696,13 +696,14 @@ function mainBoard() {
       const k = E.key(state.round, c, q);
       const used = state.used[k];
       const wh = state.wheel?.cells?.[k] && !state.dd[k];
-      cells += `<button data-pickq="${c}:${q}" class="${state.dd[k] ? 'dd' : wh ? 'wh' : ''}" ${used ? 'disabled' : ''}>${used ? '' : v}</button>`;
+      const bl = state.blind?.cells?.[k] && !state.dd[k] && !wh;
+      cells += `<button data-pickq="${c}:${q}" class="${state.dd[k] ? 'dd' : wh ? 'wh' : bl ? 'bl' : ''}" ${used ? 'disabled' : ''}>${used ? '' : v}</button>`;
     });
   });
   return `
     <div class="sec-h"><h2>Plansza</h2><span class="label">wybiera ${esc(E.nameOf(state, state.picker))} · kliknij pole, które poda</span></div>
     <div class="mini" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
-    <div class="hint" style="margin-top:12px">Pola oznaczone <b style="color:var(--tally)">W/N</b> to „wszystko albo nic”, a <b style="color:var(--amber)">KOŁO</b> to koło fortuny z pytaniami graczy${E.wheelLeft(state).length ? '' : ' (pytania na kole się skończyły, takie pole zagra jako zwykłe)'}. Widzisz je tylko Ty.</div>
+    <div class="hint" style="margin-top:12px">Pola oznaczone <b style="color:var(--tally)">W/N</b> to „wszystko albo nic”, <b style="color:var(--amber)">KOŁO</b> to koło fortuny z pytaniami graczy${E.wheelLeft(state).length ? '' : ' (pytania na kole się skończyły, takie pole zagra jako zwykłe)'}, a <b style="color:var(--hot)">CIEMNO</b> to kategoria w ciemno za podwójną stawkę. Widzisz je tylko Ty.</div>
     ${wheelExtra()}
     <div class="actions" style="margin-top:12px"><button class="btn ghost small" data-x="endRound">Zakończ rundę wcześniej</button></div>
     <div style="margin-top:16px">${wheelPanel(false)}</div>`;
@@ -717,6 +718,7 @@ function qBlock(q, reveal = true) {
   const note = q.note ? `<div class="note"><span class="label">Ciekawostka do komentarza</span>${esc(q.note)}</div>` : '';
   const pics = [];
   if (q.image) pics.push(thumb(q.image, 'Obrazek z pytaniem'));
+  (E.zoomOf(q) || []).forEach((src, i, z) => pics.push(thumb(src, i === z.length - 1 ? `Etap ${i + 1}: pełny kadr` : `Etap ${i + 1}`)));
   if (q.answerImage) pics.push(thumb(q.answerImage, 'Po odpowiedzi'));
   const img = pics.length ? `<div class="qimgs">${pics.join('')}</div>` : '';
   return `<div class="qtext">${esc(q.q)}</div>${img}${q.audio ? audioBlock(q) : ''}
@@ -942,6 +944,20 @@ function bonusBlock() {
   return `<div class="row"><button class="btn ok" data-x="wheelBonus">Premia dla autora: ${author} +${E.half(c.value)}</button><span class="hint">tylko gdy pytanie było uczciwe, a nie „co mam w kieszeni”</span></div>`;
 }
 
+function mainBlind() {
+  const { q } = questionData();
+  const cat = { name: q.category || E.BLIND_CAT };
+  const c = state.cur;
+  return `
+    <div class="sec-h"><h2 style="color:var(--tally)">Kategoria w ciemno</h2><span class="label">${esc(cat.name)} · za ${c.value} (${c.base} × 2)</span></div>
+    <div class="qcard">
+      <div class="hint">Gracze widzą tylko „Kategoria w ciemno” i stawkę. Nazwa kategorii <b>${esc(cat.name)}</b> pokaże się razem z pytaniem. Buzzery jak zwykle, pudło też kosztuje podwójnie.</div>
+      <div class="actions"><button class="btn primary" data-x="blindGo">Pokaż pytanie <kbd>Enter</kbd></button></div>
+      <div class="hint">Podgląd dla Ciebie:</div>
+      ${qBlock(q)}
+    </div>`;
+}
+
 function mainDD() {
   const { cat, q } = questionData();
   const max = E.ddMax(state);
@@ -963,9 +979,11 @@ function mainQuestion() {
   else if (c.buzzOpen) st = `<span class="st open">Buzzery otwarte</span>`;
   else st = `<span class="st closed">Buzzery zamknięte</span>`;
   const wrong = c.wrong.length ? `<span class="label">pudło: ${c.wrong.map((id) => esc(E.nameOf(state, id))).join(', ')}</span>` : '';
-  const val = c.dd ? c.wager : c.value;
+  const val = E.curValue(state);
   const canJudge = !!c.buzzed;
   const acts = [];
+  const z = c.stage != null ? E.zoomOf(q) : null;
+  if (z) acts.push(`<button class="btn" data-x="zoomNext" ${c.stage >= z.length - 1 || c.buzzed ? 'disabled' : ''}>Oddal: zbliżenie ${Math.min(c.stage + 2, z.length)} z ${z.length} <kbd>E</kbd></button>`);
   if (!E.solo(c) && !c.buzzed) acts.push(`<button class="btn primary" data-x="openBuzz" ${c.buzzOpen ? 'disabled' : ''}>Otwórz buzzery <kbd>Spacja</kbd></button>`);
   if (E.solo(c) && !c.buzzedAt) acts.push(`<button class="btn" data-x="startClock">Start zegara <kbd>Spacja</kbd></button>`);
   acts.push(`<button class="btn ok solid" data-x="right" ${canJudge ? '' : 'disabled'}>Dobrze +${val} <kbd>D</kbd></button>`);
@@ -973,7 +991,7 @@ function mainQuestion() {
   acts.push(`<button class="btn ok" data-x="half" ${canJudge ? '' : 'disabled'}>Połowa <kbd>P</kbd></button>`);
   acts.push(`<button class="btn ghost" data-x="nobody">Nikt nie wie <kbd>N</kbd></button>`);
   return `
-    <div class="sec-h"><h2>${esc(cat.name)}</h2><span class="label">${c.dd ? 'wszystko albo nic' : c.wheel ? `pytanie od ${esc(E.authorName(state, q))}` : 'pytanie'}</span></div>
+    <div class="sec-h"><h2>${esc(cat.name)}</h2><span class="label">${c.dd ? 'wszystko albo nic' : c.wheel ? `pytanie od ${esc(E.authorName(state, q))}` : c.blind != null ? 'kategoria w ciemno, stawka x2' : z ? `kadr: zbliżenie ${c.stage + 1} z ${z.length}` : 'pytanie'}</span></div>
     <div class="qcard">
       <div class="qmeta"><b class="${c.dd ? 'red' : ''}">${val}</b>${wrong}</div>
       ${qBlock(q)}
@@ -1243,6 +1261,7 @@ function renderMain() {
   else if (ph === 'round-intro') html = mainIntro();
   else if (ph === 'board') html = mainBoard();
   else if (ph === 'dd') html = mainDD();
+  else if (ph === 'blind') html = mainBlind();
   else if (ph === 'wheel') html = mainWheel();
   else if (ph === 'question') html = mainQuestion();
   else if (ph === 'reveal') html = mainReveal();
@@ -1250,7 +1269,7 @@ function renderMain() {
   else html = mainEnd();
   html += `<div class="keys">
     <span><kbd>Spacja</kbd> otwórz buzzery</span><span><kbd>D</kbd> dobrze</span><span><kbd>Z</kbd> źle</span><span><kbd>P</kbd> połowa</span>
-    <span><kbd>N</kbd> nikt</span><span><kbd>Enter</kbd> dalej</span><span><kbd>M</kbd> muzyka graj/pauza</span><span><kbd>R</kbd> od początku</span><span><kbd>1–6</kbd> zgłoszenie ręczne</span><span><kbd>H</kbd> Hall of Shame</span><span><kbd>Ctrl+Z</kbd> cofnij</span></div>`;
+    <span><kbd>N</kbd> nikt</span><span><kbd>Enter</kbd> dalej</span><span><kbd>M</kbd> muzyka graj/pauza</span><span><kbd>R</kbd> od początku</span><span><kbd>E</kbd> kadr: oddal</span><span><kbd>1–6</kbd> zgłoszenie ręczne</span><span><kbd>H</kbd> Hall of Shame</span><span><kbd>Ctrl+Z</kbd> cofnij</span></div>`;
   $main.innerHTML = html;
 }
 
@@ -1330,6 +1349,8 @@ const x = {
     if (!dispatch({ type: 'ddWager', amount: v })) toast(`Stawka musi być od ${E.DD_MIN} do ${E.ddMax(state)}`);
   },
   ddMax: () => dispatch({ type: 'ddWager', amount: E.ddMax(state) }),
+  blindGo: () => dispatch({ type: 'blindGo' }),
+  zoomNext: () => dispatch({ type: 'zoomNext' }),
   wheelSpin: () => dispatch({ type: 'wheelSpin' }),
   wheelDraw: () => dispatch({ type: 'wheelDraw' }),
   wheelGo: () => dispatch({ type: 'wheelGo' }),
@@ -1579,6 +1600,7 @@ document.addEventListener('keydown', (e) => {
     else if (ph === 'rules') state.rule < E.rulesOf(state).length - 1 ? x.ruleNext() : x.start();
     else if (ph === 'round-intro' || ph === 'reveal') x.next();
     else if (ph === 'wheel') x.wheelMain();
+    else if (ph === 'blind') x.blindGo();
     else if (ph === 'final-intro') x.finalWagers();
     else if (ph === 'final-wager') x.finalQuestion();
     else if (ph === 'final-question') x.finalReveal();
@@ -1605,6 +1627,7 @@ document.addEventListener('keydown', (e) => {
     else if (k === 'z') x.wrong();
     else if (k === 'p') x.half();
     else if (k === 'n') x.nobody();
+    else if (k === 'e') x.zoomNext();
     else if (/^[1-9]$/.test(k)) {
       const p = state.players[Number(k) - 1];
       if (p) dispatch({ type: 'manualBuzz', id: p.id });

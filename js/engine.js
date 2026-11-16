@@ -10,6 +10,11 @@ export const WHEEL_PER_PLAYER = 2;
 export const SPIN_MS = 6500; // kręcenie kołem
 export const DRAW_MS = 3200; // losowanie osoby, gdy ktoś trafi na własne pytanie
 export const WHEEL_CAT = 'Koło fortuny';
+// kategoria w ciemno: ukryte pole, pytanie z kategorii, której nie ma na planszy, za podwójną stawkę
+export const BLIND_CAT = 'Kategoria w ciemno';
+export const BLIND_MULT = 2;
+// kadr z gry: kolejne zbliżenia obrazka ("zoom" w pytaniu), za późniejsze mniej punktów
+export const ZOOM_POINTS = [1, 2 / 3, 1 / 3];
 
 import { rulesFor } from './rules.js';
 
@@ -35,7 +40,56 @@ export function newGame(set, players = [], pool = null) {
     shame: [], // Hall of Shame: najgłupsze odpowiedzi odcinka
     punish: { winner: null, loser: null, nick: '' },
     wheel: { pool: pool ? pool.map((x) => ({ ...x, used: false })) : poolFromSet(set), cells: {} },
+    blind: { cells: {}, used: [] },
   };
+}
+
+// ---------- kategoria w ciemno ----------
+
+// pula pytań w ciemno z pliku: "blind": [{ category, q, a, ... }]
+export const blindPool = (set) => (Array.isArray(set?.blind) ? set.blind : []);
+const blindValid = (x) => !!(x && x.q && x.a && x.category);
+function blindLeft(s) {
+  const used = new Set(s.blind?.used || []);
+  return blindPool(s.set).map((x, i) => i).filter((i) => blindValid(blindPool(s.set)[i]) && !used.has(i));
+}
+
+// ile pól w ciemno w rundzie: "blindFields" z rundy, a domyślnie 1, gdy w pliku jest pula
+function placeBlind(s, r) {
+  const round = s.set.rounds[r];
+  const pool = blindPool(s.set).filter(blindValid).length;
+  const want = round.blindFields != null && round.blindFields !== '' ? Math.max(0, Math.round(Number(round.blindFields)) || 0) : pool ? 1 : 0;
+  const cells = [];
+  round.categories.forEach((cat, c) =>
+    cat.questions.forEach((_, q) => {
+      const k = key(r, c, q);
+      // pole w ciemno zabiera pytanie z planszy: nie marnujemy na to kadrów ze zbliżeniami
+      if (!s.dd[k] && !s.wheel?.cells?.[k] && !zoomOf(round.categories[c].questions[q])) cells.push(k);
+    })
+  );
+  for (let n = 0; n < want && cells.length; n++) s.blind.cells[cells.splice(Math.floor(Math.random() * cells.length), 1)[0]] = true;
+}
+
+// ---------- kadr z gry: zbliżenia ----------
+
+export const zoomOf = (q) => (Array.isArray(q?.zoom) && q.zoom.length ? q.zoom : null);
+function zoomPoints(s) {
+  const p = roundOf(s)?.zoomPoints;
+  return Array.isArray(p) && p.length ? p.map(Number) : ZOOM_POINTS;
+}
+// stawka pytania teraz: przy zbliżeniach maleje z każdym etapem (zaokrąglona do 50)
+export function curValue(s) {
+  const c = s.cur;
+  if (!c) return 0;
+  if (c.dd) return c.wager;
+  const z = c.stage != null ? zoomOf(curQuestion(s)) : null;
+  if (!z) return c.value;
+  const pts = zoomPoints(s);
+  const f = pts[Math.min(c.stage, pts.length - 1)] ?? 1;
+  return Math.max(50, Math.round((c.value * f) / 50) * 50);
+}
+function startZoom(s) {
+  if (zoomOf(curQuestion(s))) s.cur.stage = 0;
 }
 
 // ---------- koło fortuny ----------
@@ -171,12 +225,14 @@ export function curQuestion(s) {
   const c = s.cur;
   if (!c) return null;
   if (c.wheel) return c.wheel.pick ? wheelPool(s).find((x) => x.id === c.wheel.pick) || null : null;
+  if (c.blind != null) return blindPool(s.set)[c.blind] || null;
   return roundOf(s).categories[c.c].questions[c.q];
 }
 export function curCategory(s) {
   const c = s.cur;
   if (!c) return '';
   if (c.wheel) return WHEEL_CAT;
+  if (c.blind != null) return s.phase === 'blind' ? BLIND_CAT : blindPool(s.set)[c.blind]?.category || BLIND_CAT;
   return roundOf(s).categories[c.c].name;
 }
 export const half = (v) => Math.round(v / 2 / 50) * 50 || Math.round(v / 2);
@@ -232,12 +288,14 @@ export function mediaRefs(set) {
   const out = [];
   const add = (q, where) => {
     for (const f of ['image', 'answerImage', 'audio']) if (q?.[f]) out.push({ src: q[f], field: f, where });
+    (zoomOf(q) || []).forEach((src, i) => src && out.push({ src, field: 'zoom', where: `${where} · zbliżenie ${i + 1}` }));
   };
   (set?.rounds || []).forEach((r, ri) =>
     (r.categories || []).forEach((c, ci) => (c.questions || []).forEach((q, qi) => add(q, `R${ri + 1} · ${c.name} · ${r.values?.[qi] ?? qi + 1}`)))
   );
   if (set?.final) add(set.final, 'Finał');
   (Array.isArray(set?.wheel) ? set.wheel : []).forEach((q, i) => add(q, `Koło · ${q?.author || 'pytanie ' + (i + 1)}`));
+  blindPool(set).forEach((q, i) => add(q, `W ciemno · ${q?.category || 'pytanie ' + (i + 1)}`));
   return out;
 }
 
@@ -366,6 +424,8 @@ export function reduce(state, a) {
       s.set.rounds.forEach((_, r) => placeDailyDoubles(s, r));
       s.wheel = { pool: wheelPool(s).map((x) => ({ ...x, used: false })), cells: {} };
       wheelPlan(s.set, wheelLeft(s).length).forEach((n, r) => n && placeWheel(s, r, n));
+      s.blind = { cells: {}, used: [] };
+      s.set.rounds.forEach((_, r) => placeBlind(s, r));
       s.picker = s.players[Math.floor(Math.random() * s.players.length)].id;
       s.phase = 'round-intro';
       s.introAt = now();
@@ -392,6 +452,7 @@ export function reduce(state, a) {
         enterWheel(s, a.c, a.q, roundOf(s).values[a.q]);
         return s;
       }
+      const blindLeftNow = s.blind?.cells?.[k] && !isDD ? blindLeft(s) : [];
       s.cur = {
         c: a.c,
         q: a.q,
@@ -408,6 +469,17 @@ export function reduce(state, a) {
         shownAt: null,
       };
       mediaCmd(s, 'stop');
+      if (blindLeftNow.length) {
+        const idx = blindLeftNow[Math.floor(Math.random() * blindLeftNow.length)];
+        s.blind.used.push(idx);
+        s.cur.blind = idx;
+        s.cur.base = s.cur.value;
+        s.cur.value = s.cur.value * BLIND_MULT;
+        s.phase = 'blind';
+        fx(s, 'dd');
+        return s;
+      }
+      startZoom(s);
       if (isDD) {
         s.phase = 'dd';
         fx(s, 'dd');
@@ -416,6 +488,21 @@ export function reduce(state, a) {
         s.cur.shownAt = now();
         fx(s, 'reveal');
       }
+      return s;
+    }
+    case 'blindGo':
+      if (s.phase !== 'blind') return state;
+      s.phase = 'question';
+      cur.shownAt = now();
+      startZoom(s);
+      fx(s, 'reveal');
+      return s;
+    case 'zoomNext': {
+      if (s.phase !== 'question' || cur.stage == null || cur.buzzed) return state;
+      const z = zoomOf(curQuestion(s));
+      if (!z || cur.stage >= z.length - 1) return state;
+      cur.stage++;
+      fx(s, 'rule');
       return s;
     }
     case 'ddWager': {
@@ -453,7 +540,7 @@ export function reduce(state, a) {
       if (s.phase !== 'question' || !cur.buzzed) return state;
       const id = cur.buzzed;
       const p = player(s, id);
-      const value = cur.dd ? cur.wager : cur.value;
+      const value = curValue(s);
       if (a.verdict === 'right' || a.verdict === 'half') {
         const gain = a.verdict === 'half' ? Math.round(value / 2 / 50) * 50 || Math.round(value / 2) : value;
         p.score += gain;
@@ -850,17 +937,24 @@ export function boardView(s) {
   }
   if (s.cur) {
     const q = curQuestion(s) || {};
-    const showQ = s.phase !== 'dd' && s.phase !== 'wheel';
+    const showQ = s.phase !== 'dd' && s.phase !== 'wheel' && s.phase !== 'blind';
+    const z = zoomOf(q);
+    let image = showQ ? q.image || null : null;
+    if (showQ && z) image = s.phase === 'reveal' ? (v.answerImage ? null : z[z.length - 1]) : z[Math.min(s.cur.stage ?? 0, z.length - 1)];
     v.cur = {
       c: s.cur.c,
       q: s.cur.q,
       category: curCategory(s),
       solo: solo(s.cur),
-      value: s.cur.value,
+      value: curValue(s),
       dd: s.cur.dd,
+      blind: s.cur.blind != null,
+      base: s.cur.base ?? null,
+      stage: z && showQ ? s.cur.stage ?? 0 : null,
+      stages: z && showQ ? z.length : null,
       wager: s.cur.wager,
       text: showQ ? q.q : null,
-      image: showQ ? q.image || null : null,
+      image,
       hasAudio: showQ && !!q.audio,
       buzzOpen: s.cur.buzzOpen,
       openedAt: s.cur.openedAt,
@@ -935,8 +1029,9 @@ export function playerView(s, id) {
   };
   if (s.cur) {
     v.category = curCategory(s);
-    v.value = s.cur.dd ? s.cur.wager : s.cur.value;
+    v.value = curValue(s);
     v.dd = s.cur.dd;
+    v.blind = s.cur.blind != null;
     v.solo = solo(s.cur);
     const w = s.cur.wheel;
     if (w) {
@@ -997,6 +1092,8 @@ export function validateSet(set) {
         if (!q || !q.a) err.push(`${cw}, pytanie ${qi + 1}: brak odpowiedzi "a".`);
         if (q?.audioEnd != null && Number(q.audioEnd) <= (Number(q.audioStart) || 0))
           err.push(`${cw}, pytanie ${qi + 1}: "audioEnd" musi być większe niż "audioStart".`);
+        if (q?.zoom != null && (!Array.isArray(q.zoom) || !q.zoom.length || q.zoom.some((x) => typeof x !== 'string' || !x)))
+          err.push(`${cw}, pytanie ${qi + 1}: "zoom" musi być listą ścieżek do obrazków (od najbliższego zbliżenia).`);
       });
     });
   });
@@ -1009,7 +1106,15 @@ export function validateSet(set) {
         if (!q?.q || !q?.a) err.push(`Koło, pytanie ${i + 1}: potrzebne "q" i "a".`);
       });
   }
+  if (set.blind != null) {
+    if (!Array.isArray(set.blind)) err.push('"blind" musi być listą pytań w ciemno.');
+    else
+      set.blind.forEach((q, i) => {
+        if (!q?.q || !q?.a || !q?.category) err.push(`W ciemno, pytanie ${i + 1}: potrzebne "category", "q" i "a".`);
+      });
+  }
   (set.rounds || []).forEach((r, ri) => {
+    if (r?.blindFields != null && !(Number(r.blindFields) >= 0)) err.push(`Runda ${ri + 1}: "blindFields" musi być liczbą od 0.`);
     if (r?.wheelFields != null && !(Number(r.wheelFields) >= 0)) err.push(`Runda ${ri + 1}: "wheelFields" musi być liczbą od 0.`);
   });
   if (set.rules != null) {
